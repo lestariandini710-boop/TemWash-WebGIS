@@ -1695,3 +1695,434 @@ td {
         grid-template-columns: 1fr;
     }
 }
+
+/* =====================================================
+   LANDING PAGE TEMWASH
+===================================================== */
+
+.temwash-landing {
+    width: 100%;
+    min-height: 100vh;
+    background: #f7f9f9;
+}
+
+.landing-header {
+    position: relative;
+    z-index: 10;
+    width: 100%;
+    height: 92px;
+    padding: 0 clamp(24px, 6vw, 110px);
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    background: #ffffff;
+    border-bottom: 1px solid #e7edef;
+}
+
+.landing-header .brand-logo {
+    width: 54px;
+    height: 54px;
+}
+
+.landing-header .brand-title {
+    font-size: 27px;
+}
+
+.landing-home-button {
+    position: relative;
+    height: 92px;
+    padding: 0 8px;
+
+    color: var(--navy);
+    font-size: 15px;
+    font-weight: 700;
+
+    background: transparent;
+    border: 0;
+}
+
+.landing-home-button::after {
+    position: absolute;
+    right: 8px;
+    bottom: 20px;
+    left: 8px;
+
+    height: 3px;
+
+    background: transparent;
+    border-radius: 10px;
+
+    content: "";
+}
+
+.landing-home-button.active::after {
+    background: var(--primary);
+}
+
+.landing-hero {
+    position: relative;
+    min-height: calc(100vh - 92px);
+    overflow: hidden;
+
+    background-image: url("assets/laundry-hero.png");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: cover;
+}
+
+.landing-overlay {
+    position: absolute;
+    inset: 0;
+
+    background:
+        linear-gradient(
+            90deg,
+            rgba(2, 54, 61, 0.97) 0%,
+            rgba(3, 70, 76, 0.91) 32%,
+            rgba(4, 76, 80, 0.58) 51%,
+            rgba(4, 63, 68, 0.12) 74%,
+            rgba(4, 63, 68, 0) 100%
+        );
+}
+
+.landing-content {
+    position: relative;
+    z-index: 2;
+
+    width: min(850px, 58%);
+    padding:
+        clamp(65px, 8vh, 100px)
+        30px
+        55px
+        clamp(30px, 6vw, 110px);
+
+    color: white;
+}
+
+.landing-eyebrow {
+    display: block;
+    margin-bottom: 25px;
+
+    color: #d2ecec;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 4px;
+}
+
+.landing-content h1 {
+    max-width: 720px;
+    margin: 0;
+
+    color: white;
+    font-size: clamp(47px, 5.2vw, 76px);
+    font-weight: 700;
+    line-height: 1.02;
+    letter-spacing: -2px;
+}
+
+.landing-content h1 span {
+    position: relative;
+    display: inline-block;
+    color: #14c7c7;
+}
+
+.landing-content h1 span::after {
+    position: absolute;
+    bottom: -8px;
+    left: 0;
+
+    width: 115px;
+    height: 4px;
+
+    background: #14c7c7;
+    border-radius: 10px;
+    transform: rotate(-2deg);
+
+    content: "";
+}
+
+.landing-description {
+    max-width: 620px;
+    margin: 30px 0 26px;
+
+    color: #f0f7f7;
+    font-size: 18px;
+    line-height: 1.55;
+}
+
+.landing-access-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+
+    width: min(790px, 100%);
+}
+
+.access-card {
+    position: relative;
+    min-height: 165px;
+    padding: 22px 64px 22px 22px;
+
+    display: grid;
+    grid-template-columns: 86px minmax(0, 1fr);
+    align-items: center;
+    gap: 15px;
+
+    text-align: left;
+    border-radius: 18px;
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.access-card:hover {
+    transform: translateY(-4px);
+    box-shadow:
+        0 16px 34px rgba(3, 33, 45, 0.24);
+}
+
+.customer-access {
+    color: var(--navy);
+    background: white;
+    border: 1px solid #bce7e6;
+}
+
+.owner-access {
+    color: white;
+    background: #073d57;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.access-icon {
+    width: 80px;
+    height: 80px;
+
+    display: grid;
+    place-items: center;
+
+    color: white;
+    border-radius: 50%;
+}
+
+.customer-icon {
+    background: var(--primary);
+}
+
+.owner-icon {
+    background: #08627d;
+}
+
+.access-icon svg {
+    width: 58px;
+    height: 58px;
+}
+
+.access-copy {
+    display: flex;
+    flex-direction: column;
+}
+
+.access-copy small {
+    margin-bottom: 2px;
+
+    color: inherit;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.access-copy strong {
+    color: inherit;
+    font-size: 25px;
+    line-height: 1.05;
+}
+
+.access-copy > span {
+    margin-top: 10px;
+
+    color: #687b88;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.owner-access .access-copy > span {
+    color: #cfdee4;
+}
+
+.access-arrow {
+    position: absolute;
+    right: 18px;
+    bottom: 18px;
+
+    width: 48px;
+    height: 48px;
+
+    display: grid;
+    place-items: center;
+
+    color: white;
+    font-size: 27px;
+    font-weight: 400;
+
+    background: var(--primary);
+    border-radius: 50%;
+}
+
+.owner-access .access-arrow {
+    color: var(--navy);
+    background: white;
+}
+
+.landing-guest-button {
+    margin-top: 20px;
+    padding: 4px 0;
+
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 15px;
+    font-weight: 500;
+    text-decoration: underline;
+    text-underline-offset: 5px;
+
+    background: transparent;
+    border: 0;
+}
+
+.landing-guest-button:hover {
+    color: #ffffff;
+}
+
+
+/* =====================================================
+   LANDING RESPONSIVE
+===================================================== */
+
+@media (max-width: 1050px) {
+    .landing-content {
+        width: 72%;
+    }
+
+    .landing-overlay {
+        background:
+            linear-gradient(
+                90deg,
+                rgba(2, 54, 61, 0.97) 0%,
+                rgba(3, 70, 76, 0.9) 48%,
+                rgba(4, 63, 68, 0.3) 80%,
+                transparent 100%
+            );
+    }
+}
+
+@media (max-width: 800px) {
+    .landing-header {
+        height: 76px;
+        padding: 0 20px;
+    }
+
+    .landing-home-button {
+        height: 76px;
+    }
+
+    .landing-home-button::after {
+        bottom: 12px;
+    }
+
+    .landing-hero {
+        min-height: calc(100vh - 76px);
+        background-position: 62% center;
+    }
+
+    .landing-overlay {
+        background:
+            linear-gradient(
+                90deg,
+                rgba(2, 54, 61, 0.94),
+                rgba(3, 70, 76, 0.82)
+            );
+    }
+
+    .landing-content {
+        width: 100%;
+        padding: 60px 24px 45px;
+    }
+
+    .landing-content h1 {
+        max-width: 650px;
+        font-size: clamp(42px, 8vw, 62px);
+    }
+
+    .landing-access-grid {
+        max-width: 700px;
+    }
+}
+
+@media (max-width: 620px) {
+    .landing-header .brand-description {
+        display: none;
+    }
+
+    .landing-header .brand-title {
+        font-size: 20px;
+    }
+
+    .landing-header .brand-logo {
+        width: 46px;
+        height: 46px;
+    }
+
+    .landing-home-button {
+        font-size: 13px;
+    }
+
+    .landing-content {
+        padding: 45px 17px 35px;
+    }
+
+    .landing-eyebrow {
+        margin-bottom: 18px;
+        font-size: 10px;
+        letter-spacing: 2px;
+    }
+
+    .landing-content h1 {
+        font-size: 40px;
+        letter-spacing: -1px;
+    }
+
+    .landing-description {
+        margin: 25px 0 22px;
+        font-size: 16px;
+    }
+
+    .landing-access-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .access-card {
+        min-height: 145px;
+        grid-template-columns: 72px 1fr;
+        padding: 18px 58px 18px 18px;
+    }
+
+    .access-icon {
+        width: 66px;
+        height: 66px;
+    }
+
+    .access-icon svg {
+        width: 48px;
+        height: 48px;
+    }
+
+    .access-copy strong {
+        font-size: 22px;
+    }
+
+    .access-arrow {
+        right: 14px;
+        bottom: 14px;
+        width: 42px;
+        height: 42px;
+    }
+}

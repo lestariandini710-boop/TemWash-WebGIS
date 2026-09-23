@@ -406,6 +406,7 @@ let markers = [];
 let radiusCircle = null;
 let userMarker = null;
 let selectedLaundryId = null;
+let selectedLoginRole = "customer";
 let orderCountdownInterval = null;
 
 
@@ -2092,122 +2093,551 @@ function showAboutPage() {
    LOGIN DAN DASHBOARD PEMILIK
 ===================================================== */
 
+/* =====================================================
+   HALAMAN AWAL TEMWASH
+===================================================== */
+
+function showLandingPage() {
+    app.innerHTML = `
+        <main class="temwash-landing">
+            <header class="landing-header">
+                ${createBrand()}
+
+                <button
+                    type="button"
+                    class="landing-home-button active"
+                    onclick="navigateTo('landing')"
+                >
+                    Beranda
+                </button>
+            </header>
+
+            <section class="landing-hero">
+                <div class="landing-overlay"></div>
+
+                <div class="landing-content">
+                    <span class="landing-eyebrow">
+                        WEBGIS LAUNDRY TEMBALANG
+                    </span>
+
+                    <h1>
+                        Satu putaran,<br>
+                        semua kebutuhan
+                        <span>laundry terpantau.</span>
+                    </h1>
+
+                    <p class="landing-description">
+                        Temukan laundry terdekat atau kelola
+                        outlet dalam satu pengalaman yang praktis.
+                    </p>
+
+                    <div class="landing-access-grid">
+                        <button
+                            type="button"
+                            class="access-card customer-access"
+                            onclick="openRoleLogin('customer')"
+                        >
+                            <span class="access-icon customer-icon">
+                                <svg
+                                    viewBox="0 0 64 64"
+                                    aria-hidden="true"
+                                >
+                                    <circle
+                                        cx="25"
+                                        cy="19"
+                                        r="10"
+                                        fill="currentColor"
+                                    />
+
+                                    <path
+                                        d="M7 49C7 36 14 29 25 29C36 29 43 36 43 49Z"
+                                        fill="currentColor"
+                                    />
+
+                                    <path
+                                        d="M48 27C40 27 34 33 34 41C34 51 48 61 48 61C48 61 62 51 62 41C62 33 56 27 48 27Z"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="4"
+                                    />
+
+                                    <circle
+                                        cx="48"
+                                        cy="41"
+                                        r="4"
+                                        fill="currentColor"
+                                    />
+                                </svg>
+                            </span>
+
+                            <span class="access-copy">
+                                <small>Masuk sebagai</small>
+                                <strong>Pelanggan</strong>
+
+                                <span>
+                                    Cari laundry, cek mesin,
+                                    dan buka rute.
+                                </span>
+                            </span>
+
+                            <span class="access-arrow">
+                                →
+                            </span>
+                        </button>
+
+                        <button
+                            type="button"
+                            class="access-card owner-access"
+                            onclick="openRoleLogin('owner')"
+                        >
+                            <span class="access-icon owner-icon">
+                                <svg
+                                    viewBox="0 0 64 64"
+                                    aria-hidden="true"
+                                >
+                                    <path
+                                        d="M10 25H54L49 12H15Z"
+                                        fill="currentColor"
+                                    />
+
+                                    <path
+                                        d="M13 27V53H51V27"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="4"
+                                    />
+
+                                    <path
+                                        d="M22 53V38H34V53"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="4"
+                                    />
+
+                                    <rect
+                                        x="39"
+                                        y="34"
+                                        width="5"
+                                        height="12"
+                                        rx="2"
+                                        fill="currentColor"
+                                    />
+
+                                    <rect
+                                        x="47"
+                                        y="29"
+                                        width="5"
+                                        height="17"
+                                        rx="2"
+                                        fill="currentColor"
+                                    />
+
+                                    <rect
+                                        x="55"
+                                        y="23"
+                                        width="5"
+                                        height="23"
+                                        rx="2"
+                                        fill="currentColor"
+                                    />
+                                </svg>
+                            </span>
+
+                            <span class="access-copy">
+                                <small>Masuk sebagai</small>
+                                <strong>Pemilik</strong>
+
+                                <span>
+                                    Kelola pesanan, mesin,
+                                    dan outlet.
+                                </span>
+                            </span>
+
+                            <span class="access-arrow">
+                                →
+                            </span>
+                        </button>
+                    </div>
+
+                    <button
+                        type="button"
+                        class="landing-guest-button"
+                        onclick="loginAsGuest()"
+                    >
+                        Lanjutkan tanpa login
+                    </button>
+                </div>
+            </section>
+        </main>
+    `;
+}
+
+
+function openRoleLogin(role) {
+    selectedLoginRole = role;
+
+    /*
+     * Pelanggan langsung masuk ke halaman peta
+     * tanpa mengisi formulir login.
+     */
+    if (role === "customer") {
+        sessionStorage.setItem(
+            "temwashRole",
+            "customer"
+        );
+
+        navigateTo("map");
+        return;
+    }
+
+    /*
+     * Pemilik tetap diarahkan ke formulir login.
+     */
+    if (role === "owner") {
+        navigateTo("login");
+    }
+}
+
 function showLoginPage() {
+    const isOwner =
+        selectedLoginRole === "owner";
+
     app.innerHTML = `
         <main class="login-page">
             <section class="login-visual">
                 ${createBrand()}
 
                 <div class="login-eyebrow">
-                    Operasional dalam satu pantauan
+                    TEMWASH GIS
                 </div>
 
                 <h1>
-                    Laundry tetap terpantau, bahkan
-                    saat kamu tidak di tempat.
+                    ${
+                        isOwner
+                            ? `
+                                Laundry tetap terpantau,
+                                bahkan saat kamu tidak
+                                di tempat.
+                            `
+                            : `
+                                Temukan laundry terdekat
+                                dengan lebih mudah.
+                            `
+                    }
                 </h1>
 
                 <p>
-                    Pantau pesanan, antrean, mesin,
-                    dan aktivitas outlet dari satu
-                    dashboard.
+                    ${
+                        isOwner
+                            ? `
+                                Pantau pesanan, antrean,
+                                mesin, dan aktivitas outlet
+                                dari satu dashboard.
+                            `
+                            : `
+                                Cari lokasi laundry, lihat
+                                ketersediaan mesin, dan
+                                temukan rute tercepat.
+                            `
+                    }
                 </p>
 
                 <article class="login-preview">
-                    <strong>
-                        Orange Laundry Premium
-                    </strong>
+                    ${
+                        isOwner
+                            ? `
+                                <strong>
+                                    Orange Laundry Premium
+                                </strong>
 
-                    <div class="login-preview-statistics">
-                        <div>
-                            <strong>4</strong>
-                            <span>Mesin aktif</span>
-                        </div>
+                                <div class="login-preview-statistics">
+                                    <div>
+                                        <strong>
+                                            ${
+                                                ownerMachines.filter(
+                                                    (machine) =>
+                                                        machine.status ===
+                                                        "Aktif"
+                                                ).length
+                                            }
+                                        </strong>
+                                        <span>Mesin aktif</span>
+                                    </div>
 
-                        <div>
-                            <strong>7</strong>
-                            <span>Antrean</span>
-                        </div>
+                                    <div>
+                                        <strong>
+                                            ${
+                                                ownerOrders.filter(
+                                                    (order) =>
+                                                        order.status ===
+                                                        "Menunggu"
+                                                ).length
+                                            }
+                                        </strong>
+                                        <span>Antrean</span>
+                                    </div>
 
-                        <div>
-                            <strong>18</strong>
-                            <span>Selesai</span>
-                        </div>
-                    </div>
+                                    <div>
+                                        <strong>
+                                            ${ownerOrders.length}
+                                        </strong>
+                                        <span>Pesanan</span>
+                                    </div>
+                                </div>
+                            `
+                            : `
+                                <strong>
+                                    Cari Laundry Terdekat
+                                </strong>
+
+                                <p>
+                                    Lihat lokasi, layanan,
+                                    jam operasional, rute,
+                                    dan status mesin laundry.
+                                </p>
+                            `
+                    }
                 </article>
             </section>
 
             <section class="login-form-side">
-                <form class="login-form" id="loginForm">
-                    <span class="status-badge open">
-                        Khusus pemilik laundry
+                <div class="login-form">
+                    <div class="login-role-tabs">
+                        <button
+                            type="button"
+                            class="login-role-button ${
+                                !isOwner ? "active" : ""
+                            }"
+                            onclick="selectLoginRole('customer')"
+                        >
+                            Pelanggan
+                        </button>
+
+                        <button
+                            type="button"
+                            class="login-role-button ${
+                                isOwner ? "active" : ""
+                            }"
+                            onclick="selectLoginRole('owner')"
+                        >
+                            Pemilik Laundry
+                        </button>
+                    </div>
+
+                    <span class="status-badge ${
+                        isOwner ? "unknown" : "open"
+                    }">
+                        ${
+                            isOwner
+                                ? "Portal pemilik laundry"
+                                : "Portal pelanggan"
+                        }
                     </span>
 
-                    <h2>Selamat datang kembali</h2>
+                    <h2>
+                        ${
+                            isOwner
+                                ? "Login Pemilik"
+                                : "Login Pelanggan"
+                        }
+                    </h2>
 
                     <p>
-                        Masuk untuk memantau outlet
-                        laundry milikmu.
+                        ${
+                            isOwner
+                                ? `
+                                    Masuk untuk mengelola
+                                    outlet laundry milikmu.
+                                `
+                                : `
+                                    Masuk untuk mencari dan
+                                    memantau laundry pilihanmu.
+                                `
+                        }
                     </p>
 
-                    <div class="form-field">
-                        <label>Email pemilik</label>
+                    <form id="roleLoginForm">
+                        <div class="form-field">
+                            <label>
+                                ${
+                                    isOwner
+                                        ? "Email pemilik"
+                                        : "Email pelanggan"
+                                }
+                            </label>
 
-                        <input
-                            type="email"
-                            value="pemilik@temwash.id"
-                            required
-                        >
-                    </div>
+                            <input
+                                id="loginEmail"
+                                type="email"
+                                value="${
+                                    isOwner
+                                        ? "pemilik@temwash.id"
+                                        : "pelanggan@temwash.id"
+                                }"
+                                required
+                            >
+                        </div>
 
-                    <div class="form-field">
-                        <label>Kata sandi</label>
+                        <div class="form-field">
+                            <label>Kata sandi</label>
 
-                        <input
-                            id="ownerPassword"
-                            type="password"
-                            value="temwash123"
-                            required
-                        >
-                    </div>
+                            <input
+                                id="loginPassword"
+                                type="password"
+                                value="${
+                                    isOwner
+                                        ? "temwash123"
+                                        : "pelanggan123"
+                                }"
+                                required
+                            >
+                        </div>
 
-                    <button
-                        type="button"
-                        class="text-button"
-                        data-action="show-password"
-                    >
-                        Lihat kata sandi
-                    </button>
-
-                    <button class="primary-button">
-                        Masuk ke dashboard
-                    </button>
-
-                    <div class="login-switch">
                         <button
                             type="button"
                             class="text-button"
-                            data-route="map"
+                            onclick="toggleLoginPassword()"
                         >
-                            Kembali ke WebGIS
+                            Lihat kata sandi
                         </button>
-                    </div>
-                </form>
+
+                        <button
+                            type="submit"
+                            class="primary-button login-submit-button"
+                        >
+                            ${
+                                isOwner
+                                    ? "Masuk ke dashboard"
+                                    : "Masuk ke WebGIS"
+                            }
+                        </button>
+                    </form>
+
+                    ${
+                        !isOwner
+                            ? `
+                                <div class="login-divider">
+                                    <span>atau</span>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    class="secondary-button guest-button"
+                                    onclick="loginAsGuest()"
+                                >
+                                    Lanjutkan sebagai tamu
+                                </button>
+                            `
+                            : ""
+                    }
+                </div>
             </section>
         </main>
     `;
 
-    document.getElementById(
-        "loginForm"
-    ).addEventListener(
-        "submit",
-        (event) => {
-            event.preventDefault();
-            navigateTo("owner");
-        }
-    );
+    document
+        .getElementById("roleLoginForm")
+        .addEventListener(
+            "submit",
+            handleRoleLogin
+        );
 }
 
+function selectLoginRole(role) {
+    selectedLoginRole = role;
+    showLoginPage();
+}
+
+
+function toggleLoginPassword() {
+    const passwordInput =
+        document.getElementById(
+            "loginPassword"
+        );
+
+    if (!passwordInput) {
+        return;
+    }
+
+    passwordInput.type =
+        passwordInput.type === "password"
+            ? "text"
+            : "password";
+}
+
+
+function handleRoleLogin(event) {
+    event.preventDefault();
+
+    const email =
+        document.getElementById(
+            "loginEmail"
+        ).value.trim();
+
+    const password =
+        document.getElementById(
+            "loginPassword"
+        ).value;
+
+    if (selectedLoginRole === "owner") {
+        if (
+            email !== "pemilik@temwash.id" ||
+            password !== "temwash123"
+        ) {
+            showToast(
+                "Email atau kata sandi pemilik salah"
+            );
+
+            return;
+        }
+
+        sessionStorage.setItem(
+            "temwashRole",
+            "owner"
+        );
+
+        navigateTo("owner");
+        return;
+    }
+
+    if (
+        email !== "pelanggan@temwash.id" ||
+        password !== "pelanggan123"
+    ) {
+        showToast(
+            "Email atau kata sandi pelanggan salah"
+        );
+
+        return;
+    }
+
+    sessionStorage.setItem(
+        "temwashRole",
+        "customer"
+    );
+
+    navigateTo("map");
+}
+
+
+function loginAsGuest() {
+    sessionStorage.setItem(
+        "temwashRole",
+        "guest"
+    );
+
+    navigateTo("map");
+}
+
+
+function logoutTemWash() {
+    sessionStorage.removeItem(
+        "temwashRole"
+    );
+
+    selectedLoginRole = "customer";
+    navigateTo("landing");
+}
 
 function createOwnerSidebar(activeMenu) {
     const menuItems = [
@@ -2246,7 +2676,7 @@ function createOwnerSidebar(activeMenu) {
 
             <button
                 class="owner-navigation-button owner-logout"
-                data-route="map"
+                data-route="logoutTemWash()"
             >
                 <span>↪</span>
                 <span>Keluar</span>
@@ -3863,6 +4293,53 @@ function navigateTo(routeName) {
 function renderRoute(routeName) {
     removeMap();
     closeLaundryDetail();
+    stopOrderCountdown();
+
+    const currentRole =
+        sessionStorage.getItem(
+            "temwashRole"
+        );
+
+    const ownerRoutes = [
+        "owner",
+        "orders",
+        "machines",
+        "finance",
+        "profile"
+    ];
+
+    if (routeName === "landing") {
+        showLandingPage();
+        return;
+    }
+
+    /*
+     * Mencegah pelanggan atau tamu masuk
+     * ke halaman khusus pemilik.
+     */
+    if (
+        ownerRoutes.includes(routeName) &&
+        currentRole !== "owner"
+    ) {
+        selectedLoginRole = "owner";
+
+        if (
+            window.location.hash !==
+            "#login"
+        ) {
+            window.location.hash =
+                "login";
+        } else {
+            showLoginPage();
+        }
+
+        return;
+    }
+
+    if (routeName === "login") {
+        showLoginPage();
+        return;
+    }
 
     if (routeName === "map") {
         showMapPage();
@@ -3876,11 +4353,6 @@ function renderRoute(routeName) {
 
     if (routeName === "about") {
         showAboutPage();
-        return;
-    }
-
-    if (routeName === "login") {
-        showLoginPage();
         return;
     }
 
@@ -3900,13 +4372,15 @@ function renderRoute(routeName) {
     }
 
     if (
-        ["finance", "profile"].includes(routeName)
+        ["finance", "profile"].includes(
+            routeName
+        )
     ) {
         showOwnerPlaceholder(routeName);
         return;
     }
 
-    showMapPage();
+    navigateTo("landing");
 }
 
 
@@ -3922,7 +4396,7 @@ window.addEventListener(
                 .replace("#", "");
 
         renderRoute(
-            routeName || "map"
+            routeName || "landing"
         );
     }
 );
@@ -3931,6 +4405,6 @@ window.addEventListener(
 const initialRoute =
     window.location.hash
         .replace("#", "") ||
-    "map";
+    "landing";
 
 renderRoute(initialRoute);
