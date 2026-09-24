@@ -1,8 +1,43 @@
+const SUPABASE_URL =
+    "https://ulblkclijgehpzaotjgk.supabase.co";
+
+const SUPABASE_ANON_KEY =
+    "sb_publishable_1OOom5mLxQpyBfa4NrMFPA_6I9x12Xq";
+
+const supabaseClient = window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_ANON_KEY
+);
+
+/* TES KONEKSI SUPABASE */
+
+async function testSupabaseConnection() {
+    const { data, error } = await supabaseClient
+        .from("outlet")
+        .select("*");
+
+    if (error) {
+        console.error(
+            "Supabase gagal terhubung:",
+            error
+        );
+
+        return;
+    }
+
+    console.log(
+        "Supabase berhasil terhubung:",
+        data
+    );
+}
+
+testSupabaseConnection();
+
 /* =====================================================
    DATA LAUNDRY
 ===================================================== */
 
-const laundryData = [
+let laundryData = [
     {
         id: 1,
         laundryId: "L001",
@@ -180,6 +215,96 @@ const laundryData = [
         price: "Belum tersedia"
     }
 ];
+
+async function loadLaundryDataFromSupabase() {
+    const { data, error } = await supabaseClient
+        .from("outlet")
+        .select("*")
+        .order("outlet_id", {
+            ascending: true
+        });
+
+    if (error) {
+        console.error(
+            "Gagal mengambil data outlet:",
+            error
+        );
+
+        return;
+    }
+
+    if (!data || data.length === 0) {
+        console.warn(
+            "Data outlet Supabase masih kosong."
+        );
+
+        return;
+    }
+
+    laundryData = data.map(
+        (outlet, index) => ({
+            id: index + 1,
+
+            laundryId:
+                outlet.outlet_id,
+
+            ownerId:
+                outlet.pemilik_id,
+
+            name:
+                outlet.nama_outlet,
+
+            address:
+                outlet.alamat,
+
+            latitude:
+                Number(outlet.latitude),
+
+            longitude:
+                Number(outlet.longitude),
+
+            service:
+                outlet.jenis_layanan ||
+                "Belum tersedia",
+
+            hours:
+                outlet.jam_operasional ||
+                "Belum tersedia",
+
+            payment:
+                outlet.metode_pembayaran ||
+                "Belum tersedia",
+
+            phone:
+                outlet.no_telepon ||
+                "Belum tersedia",
+
+            area:
+                outlet.kelurahan ||
+                "Belum tersedia",
+
+            status:
+                outlet.status_buka ||
+                "Tidak diketahui",
+
+            facilities:
+                outlet.fasilitas_lain ||
+                "Belum tersedia",
+
+            price:
+                outlet.harga_mulai
+                    ? "Rp " +
+                      Number(
+                          outlet.harga_mulai
+                      ).toLocaleString("id-ID")
+                    : "Belum tersedia"
+        })
+    );
+
+    console.log(
+        `${laundryData.length} outlet dimuat dari Supabase`
+    );
+}
 
 /* =====================================================
    DATA DUMMY PESANAN PEMILIK
@@ -2471,7 +2596,7 @@ function showLoginPage() {
                                 type="email"
                                 value="${
                                     isOwner
-                                        ? "pemilik@temwash.id"
+                                        ? "andi@temwash.id"
                                         : "pelanggan@temwash.id"
                                 }"
                                 required
@@ -2486,7 +2611,7 @@ function showLoginPage() {
                                 type="password"
                                 value="${
                                     isOwner
-                                        ? "temwash123"
+                                        ? ""
                                         : "pelanggan123"
                                 }"
                                 required
@@ -2567,26 +2692,90 @@ function toggleLoginPassword() {
 
 
 function handleRoleLogin(event) {
+async function handleRoleLogin(event) {
     event.preventDefault();
 
     const email =
-        document.getElementById(
-            "loginEmail"
-        ).value.trim();
+        document
+            .getElementById("loginEmail")
+            .value
+            .trim();
 
     const password =
-        document.getElementById(
-            "loginPassword"
-        ).value;
+        document
+            .getElementById("loginPassword")
+            .value;
 
+    /*
+     * LOGIN PEMILIK MELALUI SUPABASE
+     */
     if (selectedLoginRole === "owner") {
-        if (
-            email !== "pemilik@temwash.id" ||
-            password !== "temwash123"
-        ) {
+        const submitButton =
+            event.currentTarget.querySelector(
+                'button[type="submit"]'
+            );
+
+        submitButton.disabled = true;
+        submitButton.textContent =
+            "Sedang masuk...";
+
+        const { data, error } =
+            await supabaseClient.auth
+                .signInWithPassword({
+                    email,
+                    password
+                });
+
+        if (error) {
+            console.error(
+                "Login Supabase gagal:",
+                error
+            );
+
             showToast(
                 "Email atau kata sandi pemilik salah"
             );
+
+            submitButton.disabled = false;
+            submitButton.textContent =
+                "Masuk ke dashboard";
+
+            return;
+        }
+
+        /*
+         * Memastikan akun terdaftar
+         * sebagai pemilik laundry.
+         */
+        const {
+            data: ownerData,
+            error: ownerError
+        } = await supabaseClient
+            .from("pemilik")
+            .select(
+                "pemilik_id, nama_pemilik, email"
+            )
+            .eq(
+                "auth_user_id",
+                data.user.id
+            )
+            .single();
+
+        if (ownerError || !ownerData) {
+            console.error(
+                "Profil pemilik tidak ditemukan:",
+                ownerError
+            );
+
+            await supabaseClient.auth.signOut();
+
+            showToast(
+                "Akun ini bukan pemilik laundry"
+            );
+
+            submitButton.disabled = false;
+            submitButton.textContent =
+                "Masuk ke dashboard";
 
             return;
         }
@@ -2596,10 +2785,27 @@ function handleRoleLogin(event) {
             "owner"
         );
 
+        sessionStorage.setItem(
+            "temwashOwnerId",
+            ownerData.pemilik_id
+        );
+
+        sessionStorage.setItem(
+            "temwashOwnerName",
+            ownerData.nama_pemilik
+        );
+
+        showToast(
+            `Selamat datang, ${ownerData.nama_pemilik}`
+        );
+
         navigateTo("owner");
         return;
     }
 
+    /*
+     * LOGIN PELANGGAN MASIH SIMULASI
+     */
     if (
         email !== "pelanggan@temwash.id" ||
         password !== "pelanggan123"
@@ -2631,12 +2837,23 @@ function loginAsGuest() {
 
 
 function logoutTemWash() {
+    async function logoutTemWash() {
+    await supabaseClient.auth.signOut();
+
     sessionStorage.removeItem(
         "temwashRole"
     );
 
+    sessionStorage.removeItem(
+        "temwashOwnerId"
+    );
+
+    sessionStorage.removeItem(
+        "temwashOwnerName"
+    );
+
     selectedLoginRole = "customer";
-    navigateTo("landing");
+    navigateTo("login");
 }
 
 function createOwnerSidebar(activeMenu) {
@@ -4407,4 +4624,10 @@ const initialRoute =
         .replace("#", "") ||
     "landing";
 
-renderRoute(initialRoute);
+async function initializeApp() {
+    await loadLaundryDataFromSupabase();
+
+    renderRoute(initialRoute);
+}
+
+initializeApp();
