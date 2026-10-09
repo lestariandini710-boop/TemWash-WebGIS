@@ -2611,7 +2611,7 @@ function showLoginPage() {
                                 type="password"
                                 value="${
                                     isOwner
-                                        ? ""
+                                        ? "123456"
                                         : "pelanggan123"
                                 }"
                                 required
@@ -2691,7 +2691,6 @@ function toggleLoginPassword() {
 }
 
 
-function handleRoleLogin(event) {
 async function handleRoleLogin(event) {
     event.preventDefault();
 
@@ -2835,8 +2834,6 @@ function loginAsGuest() {
     navigateTo("map");
 }
 
-
-function logoutTemWash() {
     async function logoutTemWash() {
     await supabaseClient.auth.signOut();
 
@@ -4627,7 +4624,7 @@ const initialRoute =
 async function initializeApp() {
     await loadLaundryDataFromSupabase();
 
-    renderRoute(initialRoute);
+    updateDistances(latitude, longitude);
 }
 
 initializeApp();
