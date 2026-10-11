@@ -2126,3 +2126,85 @@ td {
         height: 42px;
     }
 }
+
+
+/* =====================================================
+   AUTENTIKASI PELANGGAN (SUPABASE AUTH)
+===================================================== */
+
+.auth-notice {
+    margin-top: 18px;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: var(--background);
+    font-size: 14px;
+    line-height: 1.55;
+}
+
+.auth-notice[hidden] {
+    display: none;
+}
+
+.auth-notice.info {
+    color: var(--navy);
+    border-color: #cfe3f2;
+    background: #eef6fc;
+}
+
+.auth-notice.success {
+    color: #1d6b32;
+    border-color: #cbe8d3;
+    background: #eefaf1;
+}
+
+.auth-notice.error {
+    color: #9c1f1f;
+    border-color: #f2d0d0;
+    background: #fdf1f1;
+}
+
+.auth-links {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.auth-links .text-button {
+    align-self: flex-start;
+    padding: 0;
+    text-align: left;
+}
+
+.auth-links .secondary-button {
+    width: 100%;
+}
+
+.customer-session {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-left: 14px;
+    border-left: 1px solid var(--border);
+}
+
+.customer-session-email {
+    max-width: 190px;
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (max-width: 860px) {
+    .customer-session {
+        padding-left: 0;
+        border-left: 0;
+    }
+
+    .customer-session-email {
+        max-width: 120px;
+    }
+}
