@@ -4,9 +4,60 @@ const SUPABASE_URL =
 const SUPABASE_ANON_KEY =
     "sb_publishable_1OOom5mLxQpyBfa4NrMFPA_6I9x12Xq";
 
+/*
+ * Tautan dari email Supabase (konfirmasi pendaftaran, atur ulang kata sandi)
+ * mendarat di halaman ini dengan parameter di URL. supabase-js membersihkan
+ * parameter itu sendiri saat inisialisasi, jadi nilainya harus ditangkap
+ * sekarang, secara sinkron, sebelum createClient() di bawah dijalankan.
+ *
+ * Alur implicit mengirim hasilnya pada hash URL (kunci access_token, dengan
+ * kunci type bernilai recovery untuk tautan atur ulang kata sandi). Galat
+ * dikirim sebagai kunci error dan error_description pada query string.
+ */
+const INITIAL_AUTH_PARAMS = (() => {
+    const raw =
+        (window.location.search || "") +
+        "&" +
+        (window.location.hash || "");
+
+    const baca = (kunci) => {
+        const cocok = raw.match(
+            new RegExp("[?&#]" + kunci + "=([^&]*)")
+        );
+
+        if (!cocok) {
+            return "";
+        }
+
+        return decodeURIComponent(
+            cocok[1].replace(/\+/g, " ")
+        );
+    };
+
+    return {
+        type: baca("type"),
+        token: baca("access_token") || baca("code"),
+        error:
+            baca("error_description") ||
+            baca("error_code") ||
+            baca("error")
+    };
+})();
+
 const supabaseClient = window.supabase.createClient(
     SUPABASE_URL,
-    SUPABASE_ANON_KEY
+    SUPABASE_ANON_KEY,
+    {
+        auth: {
+            /* Dipatok eksplisit supaya perilakunya tidak bergantung versi
+               supabase-js: alur implicit mengirim hasil tautan email pada
+               hash URL, dan itu yang dibaca INITIAL_AUTH_PARAMS di atas. */
+            flowType: "implicit",
+            persistSession: true,
+            autoRefreshToken: true,
+            detectSessionInUrl: true
+        }
+    }
 );
 
 /* TES KONEKSI SUPABASE */
@@ -532,6 +583,32 @@ let radiusCircle = null;
 let userMarker = null;
 let selectedLaundryId = null;
 let selectedLoginRole = "owner";
+
+/*
+ * Peran yang sedang aktif di tab ini: "owner" | "customer" | "guest".
+ * Disimpan di sessionStorage karena hanya berlaku untuk tab ini.
+ */
+function currentRole() {
+    return sessionStorage.getItem("temwashRole");
+}
+
+/*
+ * Halaman autentikasi pelanggan punya empat mode:
+ * "login" (masuk) · "signup" (daftar) · "reset" (minta tautan atur ulang)
+ * · "new-password" (memasang kata sandi baru setelah membuka tautan atur ulang)
+ */
+let customerAuthMode = "login";
+let customerAuthNotice = "";
+let customerAuthNoticeKind = "info";
+
+/* Rute yang hanya boleh dibuka pemilik laundry. */
+const OWNER_ROUTES = [
+    "owner",
+    "orders",
+    "machines",
+    "finance",
+    "profile"
+];
 let orderCountdownInterval = null;
 
 
@@ -1037,6 +1114,36 @@ function createHeader(activePage) {
             >
                 ◎ Lokasi Saya
             </button>
+
+            ${
+                currentRole() === "customer"
+                    ? `
+                        <div class="customer-session">
+                            <span class="customer-session-email">
+                                ${sessionStorage.getItem(
+                                    "temwashCustomerEmail"
+                                ) || "Pelanggan"}
+                            </span>
+
+                            <button
+                                type="button"
+                                class="text-button"
+                                data-action="logout"
+                            >
+                                Keluar
+                            </button>
+                        </div>
+                    `
+                    : `
+                        <button
+                            type="button"
+                            class="secondary-button"
+                            data-route="customer"
+                        >
+                            Masuk / Daftar
+                        </button>
+                    `
+            }
         </header>
     `;
 }
@@ -1421,6 +1528,15 @@ function initializeMap() {
     drawRadiusCircle(5);
 
     setTimeout(() => {
+        /*
+         * Penjaga: bila pengguna berpindah halaman dalam 250 ms, peta sudah
+         * dibuang removeMap() dan `map` bernilai null. Dulu ini melempar
+         * "Cannot read properties of null (reading 'invalidateSize')".
+         */
+        if (!map) {
+            return;
+        }
+
         map.invalidateSize();
     }, 250);
 }
@@ -2392,25 +2508,972 @@ function showLandingPage() {
 }
 
 
-function openRoleLogin(role) {
-    selectedLoginRole = role;
+/* =====================================================
+   AUTENTIKASI PELANGGAN — SUPABASE AUTH
+===================================================== */
 
-    /*
-     * Pelanggan langsung masuk ke halaman peta
-     * tanpa mengisi formulir login.
-     */
-    if (role === "customer") {
-        sessionStorage.setItem(
-            "temwashRole",
-            "customer"
+/*
+ * Alamat yang dipakai Supabase untuk mengembalikan pengguna setelah membuka
+ * tautan di email (konfirmasi akun / atur ulang kata sandi). Dihitung dari URL
+ * yang sedang dibuka supaya ikut benar di server uji lokal maupun di
+ * https://ownmap.id/osig10/. Alamat ini wajib terdaftar di daftar izin
+ * Redirect URLs pada dashboard Supabase (lihat docs/SUPABASE-AUTH.md).
+ */
+function authRedirectUrl() {
+    return (
+        window.location.origin +
+        window.location.pathname.replace(/index\.html$/, "")
+    );
+}
+
+function setCustomerNotice(kind, message) {
+    customerAuthNoticeKind = kind;
+    customerAuthNotice = message;
+
+    const box = document.getElementById(
+        "customerAuthNotice"
+    );
+
+    if (!box) {
+        return;
+    }
+
+    box.className = "auth-notice " + kind;
+    box.textContent = message;
+    box.hidden = message === "";
+}
+
+function switchCustomerAuthMode(mode) {
+    customerAuthMode = mode;
+    customerAuthNotice = "";
+    customerAuthNoticeKind = "info";
+    selectedLoginRole = "customer";
+
+    showCustomerAuthPage();
+}
+
+function setButtonBusy(button, busy, busyText, idleText) {
+    if (!button) {
+        return;
+    }
+
+    button.disabled = busy;
+    button.textContent = busy ? busyText : idleText;
+}
+
+/*
+ * Menerjemahkan galat Supabase Auth menjadi kalimat berbahasa Indonesia.
+ */
+function customerAuthErrorMessage(error, fallback) {
+    const code = (error && error.code) || "";
+
+    const message =
+        (error &&
+            (error.message || error.error_description)) ||
+        "";
+
+    if (
+        code === "email_not_confirmed" ||
+        /email not confirmed/i.test(message)
+    ) {
+        return "Email belum dikonfirmasi. Buka tautan konfirmasi di kotak masuk Anda, lalu masuk di sini.";
+    }
+
+    if (
+        code === "invalid_credentials" ||
+        /invalid login credentials/i.test(message)
+    ) {
+        return "Email atau kata sandi salah.";
+    }
+
+    if (/user already registered/i.test(message)) {
+        return "Email sudah terdaftar. Silakan masuk, atau pakai Lupa kata sandi.";
+    }
+
+    if (
+        code === "over_email_send_rate_limit" ||
+        /rate limit/i.test(message)
+    ) {
+        return "Permintaan email terlalu sering. Coba lagi beberapa menit kemudian.";
+    }
+
+    if (/password should be at least/i.test(message)) {
+        return "Kata sandi minimal 6 karakter.";
+    }
+
+    if (
+        /unable to validate email|invalid format/i.test(message)
+    ) {
+        return "Format email tidak dikenali.";
+    }
+
+    if (/signups not allowed|signup.*disabled/i.test(message)) {
+        return "Pendaftaran akun sedang dimatikan di sisi server.";
+    }
+
+    return fallback;
+}
+
+/*
+ * Memeriksa apakah sebuah akun terdaftar di tabel `pemilik`. Dipakai dua kali:
+ * memastikan pemilik benar berhak membuka dashboard, dan memastikan akun
+ * pemilik tidak masuk lewat pintu pelanggan.
+ *
+ * Galat jaringan dikembalikan terpisah supaya pemanggil tidak salah
+ * menyimpulkan "bukan pemilik" hanya karena koneksi sedang gagal.
+ */
+async function findOwnerProfile(userId) {
+    if (!userId) {
+        return { owner: null, error: null };
+    }
+
+    const { data, error } = await supabaseClient
+        .from("pemilik")
+        .select("pemilik_id, nama_pemilik, email")
+        .eq("auth_user_id", userId)
+        .maybeSingle();
+
+    if (error) {
+        console.warn(
+            "Pemeriksaan profil pemilik gagal:",
+            error.message
         );
 
-        navigateTo("map");
+        return { owner: null, error };
+    }
+
+    return { owner: data || null, error: null };
+}
+
+function storeOwnerSession(owner) {
+    sessionStorage.setItem("temwashRole", "owner");
+    sessionStorage.setItem(
+        "temwashOwnerId",
+        owner.pemilik_id
+    );
+    sessionStorage.setItem(
+        "temwashOwnerName",
+        owner.nama_pemilik
+    );
+    sessionStorage.removeItem(
+        "temwashCustomerEmail"
+    );
+}
+
+function storeCustomerSession(session, user) {
+    const email =
+        (user && user.email) ||
+        (session &&
+            session.user &&
+            session.user.email) ||
+        "";
+
+    sessionStorage.setItem("temwashRole", "customer");
+    sessionStorage.setItem(
+        "temwashCustomerEmail",
+        email
+    );
+    sessionStorage.removeItem("temwashOwnerId");
+    sessionStorage.removeItem("temwashOwnerName");
+}
+
+function clearStoredSession() {
+    sessionStorage.removeItem("temwashRole");
+    sessionStorage.removeItem("temwashOwnerId");
+    sessionStorage.removeItem("temwashOwnerName");
+    sessionStorage.removeItem(
+        "temwashCustomerEmail"
+    );
+}
+
+function createCustomerEmailField() {
+    return `
+        <div class="form-field">
+            <label for="customerEmail">Email</label>
+
+            <input
+                id="customerEmail"
+                type="email"
+                placeholder="nama@email.com"
+                autocomplete="email"
+                required
+            >
+        </div>
+    `;
+}
+
+function createCustomerPasswordField(
+    id,
+    label,
+    autocomplete,
+    placeholder
+) {
+    return `
+        <div class="form-field">
+            <label for="${id}">${label}</label>
+
+            <input
+                id="${id}"
+                type="password"
+                placeholder="${placeholder}"
+                autocomplete="${autocomplete}"
+                required
+            >
+        </div>
+    `;
+}
+
+function showCustomerAuthPage() {
+    const mode = customerAuthMode;
+
+    const judul =
+        {
+            login: "Masuk Pelanggan",
+            signup: "Daftar Akun Pelanggan",
+            reset: "Lupa Kata Sandi",
+            "new-password": "Pasang Kata Sandi Baru"
+        }[mode] || "Masuk Pelanggan";
+
+    const penjelasan =
+        {
+            login:
+                "Masuk untuk melanjutkan ke peta laundry.",
+            signup:
+                "Buat akun dengan email aktif. Kami kirim tautan konfirmasi lebih dulu.",
+            reset:
+                "Masukkan email akunmu. Kami kirim tautan untuk memasang kata sandi baru.",
+            "new-password":
+                "Masukkan kata sandi baru untuk akunmu, lalu masuk kembali."
+        }[mode] || "";
+
+    const tombol =
+        {
+            login: "Masuk",
+            signup: "Daftar akun",
+            reset: "Kirim tautan atur ulang",
+            "new-password": "Simpan kata sandi baru"
+        }[mode] || "Masuk";
+
+    const fields = [];
+
+    if (mode !== "new-password") {
+        fields.push(createCustomerEmailField());
+    }
+
+    if (
+        mode === "login" ||
+        mode === "signup" ||
+        mode === "new-password"
+    ) {
+        fields.push(
+            createCustomerPasswordField(
+                "customerPassword",
+                mode === "login"
+                    ? "Kata sandi"
+                    : "Kata sandi (minimal 6 karakter)",
+                mode === "login"
+                    ? "current-password"
+                    : "new-password",
+                "••••••••"
+            )
+        );
+    }
+
+    if (
+        mode === "signup" ||
+        mode === "new-password"
+    ) {
+        fields.push(
+            createCustomerPasswordField(
+                "customerPasswordConfirm",
+                "Ulangi kata sandi",
+                "new-password",
+                "••••••••"
+            )
+        );
+    }
+
+    let tautan = "";
+
+    if (mode === "login") {
+        tautan = `
+            <button
+                type="button"
+                class="text-button"
+                onclick="switchCustomerAuthMode('signup')"
+            >
+                Belum punya akun? Daftar
+            </button>
+
+            <button
+                type="button"
+                class="text-button"
+                onclick="switchCustomerAuthMode('reset')"
+            >
+                Lupa kata sandi?
+            </button>
+
+            <button
+                type="button"
+                class="secondary-button guest-button"
+                onclick="loginAsGuest()"
+            >
+                Lihat peta tanpa akun
+            </button>
+        `;
+    }
+
+    if (mode === "signup") {
+        tautan = `
+            <button
+                type="button"
+                class="text-button"
+                onclick="switchCustomerAuthMode('login')"
+            >
+                Sudah punya akun? Masuk
+            </button>
+        `;
+    }
+
+    if (mode === "reset") {
+        tautan = `
+            <button
+                type="button"
+                class="text-button"
+                onclick="switchCustomerAuthMode('login')"
+            >
+                Kembali ke halaman masuk
+            </button>
+        `;
+    }
+
+    app.innerHTML = `
+        <main class="login-page">
+            <section class="login-visual">
+                ${createBrand()}
+
+                <div class="login-eyebrow">
+                    TEMWASH GIS
+                </div>
+
+                <h1>
+                    Temukan laundry terdekat
+                    dengan lebih mudah.
+                </h1>
+
+                <p>
+                    Cari lokasi laundry, lihat
+                    ketersediaan mesin, dan temukan
+                    rute tercepat.
+                </p>
+
+                <article class="login-preview">
+                    <strong>
+                        Cari Laundry Terdekat
+                    </strong>
+
+                    <p>
+                        Lihat lokasi, layanan, jam
+                        operasional, rute, dan status
+                        mesin laundry.
+                    </p>
+                </article>
+            </section>
+
+            <section class="login-form-side">
+                <div class="login-form">
+                    <h2>${judul}</h2>
+
+                    <p>${penjelasan}</p>
+
+                    <div
+                        id="customerAuthNotice"
+                        class="auth-notice ${customerAuthNoticeKind}"
+                        ${customerAuthNotice ? "" : "hidden"}
+                    >${customerAuthNotice}</div>
+
+                    <form
+                        id="customerAuthForm"
+                        novalidate
+                    >
+                        ${fields.join("")}
+
+                        <button
+                            type="submit"
+                            class="primary-button login-submit-button"
+                        >
+                            ${tombol}
+                        </button>
+                    </form>
+
+                    <div class="auth-links">
+                        ${tautan}
+                    </div>
+                </div>
+            </section>
+        </main>
+    `;
+
+    document
+        .getElementById("customerAuthForm")
+        .addEventListener(
+            "submit",
+            handleCustomerAuthSubmit
+        );
+}
+
+async function handleCustomerAuthSubmit(event) {
+    event.preventDefault();
+
+    const emailInput = document.getElementById(
+        "customerEmail"
+    );
+
+    const passwordInput = document.getElementById(
+        "customerPassword"
+    );
+
+    const confirmInput = document.getElementById(
+        "customerPasswordConfirm"
+    );
+
+    const email = emailInput
+        ? emailInput.value.trim()
+        : "";
+
+    const password = passwordInput
+        ? passwordInput.value
+        : "";
+
+    const konfirmasi = confirmInput
+        ? confirmInput.value
+        : "";
+
+    const button = event.currentTarget.querySelector(
+        'button[type="submit"]'
+    );
+
+    if (customerAuthMode === "reset") {
+        if (!email) {
+            setCustomerNotice(
+                "error",
+                "Masukkan email akunmu lebih dulu."
+            );
+
+            return;
+        }
+
+        await requestCustomerPasswordReset(email);
+
+        return;
+    }
+
+    if (customerAuthMode === "signup") {
+        if (!email || !password) {
+            setCustomerNotice(
+                "error",
+                "Email dan kata sandi wajib diisi."
+            );
+
+            return;
+        }
+
+        if (password.length < 6) {
+            setCustomerNotice(
+                "error",
+                "Kata sandi minimal 6 karakter."
+            );
+
+            return;
+        }
+
+        if (password !== konfirmasi) {
+            setCustomerNotice(
+                "error",
+                "Kata sandi dan ulangannya tidak sama."
+            );
+
+            return;
+        }
+
+        await registerCustomer(
+            email,
+            password,
+            button
+        );
+
+        return;
+    }
+
+    if (customerAuthMode === "new-password") {
+        if (password.length < 6) {
+            setCustomerNotice(
+                "error",
+                "Kata sandi minimal 6 karakter."
+            );
+
+            return;
+        }
+
+        if (password !== konfirmasi) {
+            setCustomerNotice(
+                "error",
+                "Kata sandi dan ulangannya tidak sama."
+            );
+
+            return;
+        }
+
+        await saveNewCustomerPassword(
+            password,
+            button
+        );
+
+        return;
+    }
+
+    if (!email || !password) {
+        setCustomerNotice(
+            "error",
+            "Email dan kata sandi wajib diisi."
+        );
+
+        return;
+    }
+
+    await loginCustomer(email, password, button);
+}
+
+async function loginCustomer(email, password, button) {
+    setButtonBusy(button, true, "Sedang masuk...", "Masuk");
+
+    const { data, error } =
+        await supabaseClient.auth.signInWithPassword({
+            email,
+            password
+        });
+
+    setButtonBusy(button, false, "", "Masuk");
+
+    if (error) {
+        console.error("Login pelanggan gagal:", error);
+
+        setCustomerNotice(
+            "error",
+            customerAuthErrorMessage(
+                error,
+                "Gagal masuk. Coba lagi sebentar lagi."
+            )
+        );
+
         return;
     }
 
     /*
-     * Pemilik tetap diarahkan ke formulir login.
+     * Akun pemilik tidak boleh masuk lewat pintu pelanggan, supaya tidak ada
+     * satu akun yang memegang dua peran sekaligus.
+     */
+    const { owner } = await findOwnerProfile(
+        data.user.id
+    );
+
+    if (owner) {
+        await supabaseClient.auth.signOut();
+        clearStoredSession();
+
+        setCustomerNotice(
+            "error",
+            "Akun ini terdaftar sebagai pemilik laundry. Silakan masuk lewat portal pemilik."
+        );
+
+        return;
+    }
+
+    storeCustomerSession(data.session, data.user);
+
+    showToast("Selamat datang");
+
+    navigateTo("map");
+}
+
+async function registerCustomer(email, password, button) {
+    setButtonBusy(
+        button,
+        true,
+        "Mendaftarkan...",
+        "Daftar akun"
+    );
+
+    const { data, error } =
+        await supabaseClient.auth.signUp({
+            email,
+            password,
+            options: {
+                emailRedirectTo: authRedirectUrl()
+            }
+        });
+
+    setButtonBusy(
+        button,
+        false,
+        "",
+        "Daftar akun"
+    );
+
+    if (error) {
+        console.error(
+            "Pendaftaran pelanggan gagal:",
+            error
+        );
+
+        setCustomerNotice(
+            "error",
+            customerAuthErrorMessage(
+                error,
+                "Pendaftaran gagal. Coba lagi sebentar lagi."
+            )
+        );
+
+        return;
+    }
+
+    /*
+     * Bila konfirmasi email menyala (setelan yang disarankan), Supabase tidak
+     * mengembalikan galat untuk email yang sudah terdaftar — ia mengembalikan
+     * pengguna tanpa identitas. Itu yang diperiksa di sini.
+     */
+    const sudahTerdaftar =
+        data.user &&
+        Array.isArray(data.user.identities) &&
+        data.user.identities.length === 0;
+
+    if (sudahTerdaftar) {
+        customerAuthMode = "login";
+        customerAuthNoticeKind = "error";
+        customerAuthNotice =
+            "Email sudah terdaftar. Silakan masuk, atau pakai Lupa kata sandi.";
+
+        showCustomerAuthPage();
+
+        return;
+    }
+
+    /*
+     * Bila "Confirm email" dimatikan di dashboard Supabase, Supabase langsung
+     * memberi sesi dan pelanggan bisa masuk saat itu juga.
+     */
+    if (data.session) {
+        storeCustomerSession(
+            data.session,
+            data.user
+        );
+
+        showToast("Pendaftaran berhasil. Selamat datang");
+
+        navigateTo("map");
+
+        return;
+    }
+
+    customerAuthMode = "login";
+    customerAuthNoticeKind = "success";
+    customerAuthNotice =
+        "Pendaftaran berhasil. Kami mengirim tautan konfirmasi ke " +
+        email +
+        ". Buka tautan itu untuk mengaktifkan akun, lalu masuk di halaman ini.";
+
+    showCustomerAuthPage();
+}
+
+async function requestCustomerPasswordReset(email) {
+    const { error } =
+        await supabaseClient.auth.resetPasswordForEmail(
+            email,
+            { redirectTo: authRedirectUrl() }
+        );
+
+    if (error && error.code === "over_email_send_rate_limit") {
+        setCustomerNotice(
+            "error",
+            customerAuthErrorMessage(
+                error,
+                "Permintaan email terlalu sering."
+            )
+        );
+
+        return;
+    }
+
+    if (error) {
+        console.warn(
+            "Permintaan atur ulang kata sandi gagal:",
+            error.message
+        );
+    }
+
+    /*
+     * Pesan selalu sama, baik email terdaftar maupun tidak, supaya halaman ini
+     * tidak bisa dipakai menebak email siapa saja yang punya akun.
+     */
+    customerAuthNoticeKind = "success";
+    customerAuthNotice =
+        "Kalau " +
+        email +
+        " terdaftar, kami sudah mengirim tautan untuk memasang kata sandi baru. Periksa kotak masuk dan folder spam.";
+
+    showCustomerAuthPage();
+}
+
+async function saveNewCustomerPassword(password, button) {
+    setButtonBusy(
+        button,
+        true,
+        "Menyimpan...",
+        "Simpan kata sandi baru"
+    );
+
+    const { error } =
+        await supabaseClient.auth.updateUser({
+            password
+        });
+
+    setButtonBusy(
+        button,
+        false,
+        "",
+        "Simpan kata sandi baru"
+    );
+
+    if (error) {
+        console.error(
+            "Gagal memasang kata sandi baru:",
+            error
+        );
+
+        setCustomerNotice(
+            "error",
+            customerAuthErrorMessage(
+                error,
+                "Gagal memasang kata sandi baru. Minta tautan atur ulang yang baru."
+            )
+        );
+
+        return;
+    }
+
+    await supabaseClient.auth.signOut();
+    clearStoredSession();
+
+    customerAuthMode = "login";
+    customerAuthNoticeKind = "success";
+    customerAuthNotice =
+        "Kata sandi sudah diperbarui. Silakan masuk dengan kata sandi baru.";
+
+    showCustomerAuthPage();
+}
+
+/*
+ * Dipanggil sekali saat halaman dibuka bila URL-nya membawa hasil tautan email
+ * Supabase. Mengembalikan nama rute yang harus ditampilkan.
+ */
+async function finishAuthRedirect() {
+    const params = INITIAL_AUTH_PARAMS;
+
+    if (params.error) {
+        selectedLoginRole = "customer";
+        customerAuthMode = "login";
+        customerAuthNoticeKind = "error";
+        customerAuthNotice =
+            "Tautan tidak bisa dipakai (" +
+            params.error +
+            "). Silakan masuk, atau minta tautan baru.";
+
+        return "customer";
+    }
+
+    if (params.type === "recovery") {
+        const {
+            data: { session }
+        } = await supabaseClient.auth.getSession();
+
+        selectedLoginRole = "customer";
+
+        if (session) {
+            customerAuthMode = "new-password";
+            customerAuthNoticeKind = "info";
+            customerAuthNotice =
+                "Masukkan kata sandi baru untuk " +
+                (session.user.email || "akunmu") +
+                ".";
+
+            return "customer";
+        }
+
+        customerAuthMode = "reset";
+        customerAuthNoticeKind = "error";
+        customerAuthNotice =
+            "Tautan atur ulang sudah kedaluwarsa. Silakan minta tautan baru.";
+
+        return "customer";
+    }
+
+    /*
+     * Selain tautan atur ulang, tautan email yang masuk adalah konfirmasi
+     * pendaftaran. Kalau sesinya sudah terbentuk, pelanggan langsung diantar
+     * ke peta; kalau tidak, diminta masuk.
+     */
+    const {
+        data: { session }
+    } = await supabaseClient.auth.getSession();
+
+    if (session && session.user) {
+        const { owner } = await findOwnerProfile(
+            session.user.id
+        );
+
+        if (owner) {
+            storeOwnerSession(owner);
+
+            showToast(
+                `Selamat datang, ${owner.nama_pemilik}`
+            );
+
+            return "owner";
+        }
+
+        storeCustomerSession(session, session.user);
+
+        showToast(
+            "Email terkonfirmasi. Selamat datang!"
+        );
+
+        return "map";
+    }
+
+    selectedLoginRole = "customer";
+    customerAuthMode = "login";
+    customerAuthNoticeKind = "success";
+    customerAuthNotice =
+        "Email sudah dikonfirmasi. Silakan masuk.";
+
+    return "customer";
+}
+
+/*
+ * Memulihkan peran dari sesi Supabase yang masih tersimpan, supaya memuat
+ * ulang halaman tidak menjatuhkan pemilik yang sedang membuka dashboard dan
+ * pelanggan yang sedang menelusuri peta.
+ */
+async function restoreRoleFromSession() {
+    if (currentRole()) {
+        return;
+    }
+
+    try {
+        const {
+            data: { session }
+        } = await supabaseClient.auth.getSession();
+
+        if (!session || !session.user) {
+            return;
+        }
+
+        const { owner } = await findOwnerProfile(
+            session.user.id
+        );
+
+        if (owner) {
+            storeOwnerSession(owner);
+            return;
+        }
+
+        storeCustomerSession(session, session.user);
+    } catch (error) {
+        console.warn(
+            "Gagal memulihkan peran dari sesi:",
+            error
+        );
+    }
+}
+
+/*
+ * Pemilik hanya boleh membuka halaman pemilik kalau sesi Supabase-nya masih
+ * hidup DAN akunnya benar ada di tabel `pemilik`. Peran di sessionStorage saja
+ * tidak cukup karena bisa diubah dari console browser.
+ */
+async function verifyOwnerAccess(render) {
+    let session = null;
+
+    try {
+        const hasil =
+            await supabaseClient.auth.getSession();
+
+        session = hasil.data.session;
+    } catch (error) {
+        console.warn(
+            "Gagal membaca sesi pemilik:",
+            error
+        );
+    }
+
+    if (!session || !session.user) {
+        clearStoredSession();
+        showToast("Sesi berakhir. Silakan masuk kembali.");
+        selectedLoginRole = "owner";
+        window.location.hash = "login";
+
+        return;
+    }
+
+    const { owner, error } = await findOwnerProfile(
+        session.user.id
+    );
+
+    if (error) {
+        /*
+         * Jaringan bermasalah: pemilik yang sudah masuk jangan dikunci keluar
+         * hanya karena pemeriksaan tidak bisa diselesaikan.
+         */
+        console.warn(
+            "Verifikasi pemilik dilewati karena gangguan koneksi."
+        );
+
+        render();
+
+        return;
+    }
+
+    if (owner) {
+        storeOwnerSession(owner);
+        render();
+
+        return;
+    }
+
+    await supabaseClient.auth.signOut();
+    clearStoredSession();
+    showToast("Akun ini bukan pemilik laundry");
+    selectedLoginRole = "owner";
+    window.location.hash = "login";
+}
+
+
+function openRoleLogin(role) {
+    selectedLoginRole = role;
+
+    /*
+     * Pelanggan diarahkan ke halaman masuk/daftar (Supabase Auth).
+     * Tamu yang hanya ingin melihat peta tetap bisa lewat tautan
+     * "Lihat peta tanpa akun" di halaman itu.
+     */
+    if (role === "customer") {
+        customerAuthMode = "login";
+        navigateTo("customer");
+        return;
+    }
+
+    /*
+     * Pemilik tetap diarahkan ke formulir login pemilik.
      */
     if (role === "owner") {
         navigateTo("login");
@@ -2741,25 +3804,14 @@ async function handleRoleLogin(event) {
     }
 
     /*
-     * LOGIN PELANGGAN MASIH SIMULASI
+     * Jalur pelanggan sekarang ditangani halaman autentikasi pelanggan
+     * (#customer / handleCustomerAuthSubmit) memakai Supabase Auth, sehingga
+     * akun pelanggan tidak lagi memakai kredensial bersama.
      */
-    if (
-        email !== "pelanggan@temwash.id" ||
-        password !== "pelanggan123"
-    ) {
-        showToast(
-            "Email atau kata sandi pelanggan salah"
-        );
+    selectedLoginRole = "customer";
+    customerAuthMode = "login";
 
-        return;
-    }
-
-    sessionStorage.setItem(
-        "temwashRole",
-        "customer"
-    );
-
-    navigateTo("map");
+    navigateTo("customer");
 }
 
 
@@ -2769,26 +3821,33 @@ function loginAsGuest() {
         "guest"
     );
 
+    sessionStorage.removeItem(
+        "temwashCustomerEmail"
+    );
+
     navigateTo("map");
 }
 
-    async function logoutTemWash() {
+
+async function logoutTemWash() {
+    const peranSebelumnya = currentRole();
+
     await supabaseClient.auth.signOut();
 
-    sessionStorage.removeItem(
-        "temwashRole"
-    );
+    clearStoredSession();
 
-    sessionStorage.removeItem(
-        "temwashOwnerId"
-    );
+    showToast("Anda sudah keluar");
 
-    sessionStorage.removeItem(
-        "temwashOwnerName"
-    );
+    if (peranSebelumnya === "owner") {
+        selectedLoginRole = "owner";
+        navigateTo("login");
+
+        return;
+    }
 
     selectedLoginRole = "customer";
-    navigateTo("login");
+    customerAuthMode = "login";
+    navigateTo("landing");
 }
 
 function createOwnerSidebar(activeMenu) {
@@ -2828,7 +3887,7 @@ function createOwnerSidebar(activeMenu) {
 
             <button
                 class="owner-navigation-button owner-logout"
-                data-route="logoutTemWash()"
+                data-action="logout"
             >
                 <span>↪</span>
                 <span>Keluar</span>
@@ -4333,9 +5392,24 @@ document.addEventListener(
             );
 
         if (routeButton) {
-            navigateTo(
-                routeButton.dataset.route
-            );
+            const tujuan = routeButton.dataset.route;
+
+            /*
+             * Rute harus berupa nama halaman. Kalau nilainya ternyata nama
+             * fungsi (diakhiri "()"), jangan dipakai sebagai hash — itu
+             * kesalahan penulisan atribut, dan sebelumnya membuat tombol
+             * "Keluar" pemilik hanya berpindah ke landing tanpa keluar.
+             */
+            if (tujuan.endsWith("()")) {
+                console.warn(
+                    "data-route berisi nama fungsi:",
+                    tujuan
+                );
+
+                return;
+            }
+
+            navigateTo(tujuan);
 
             return;
         }
@@ -4385,6 +5459,10 @@ document.addEventListener(
 
         if (action === "my-location") {
             findUserLocation();
+        }
+
+        if (action === "logout") {
+            logoutTemWash();
         }
 
         if (action === "close-detail") {
@@ -4447,49 +5525,49 @@ function renderRoute(routeName) {
     closeLaundryDetail();
     stopOrderCountdown();
 
-    const currentRole =
-        sessionStorage.getItem(
-            "temwashRole"
-        );
-
-    const ownerRoutes = [
-        "owner",
-        "orders",
-        "machines",
-        "finance",
-        "profile"
-    ];
-
     if (routeName === "landing") {
         showLandingPage();
         return;
     }
 
     /*
-     * Mencegah pelanggan atau tamu masuk
-     * ke halaman khusus pemilik.
+     * Halaman khusus pemilik. Peran pelanggan dan tamu ditolak di sini, dan
+     * peran pemilik masih diperiksa ulang ke Supabase lewat verifyOwnerAccess()
+     * sebelum halamannya benar-benar dirender.
      */
-    if (
-        ownerRoutes.includes(routeName) &&
-        currentRole !== "owner"
-    ) {
-        selectedLoginRole = "owner";
+    if (OWNER_ROUTES.includes(routeName)) {
+        if (currentRole() !== "owner") {
+            selectedLoginRole = "owner";
 
-        if (
-            window.location.hash !==
-            "#login"
-        ) {
-            window.location.hash =
-                "login";
-        } else {
-            showLoginPage();
+            if (
+                window.location.hash !==
+                "#login"
+            ) {
+                window.location.hash =
+                    "login";
+            } else {
+                showLoginPage();
+            }
+
+            return;
         }
+
+        verifyOwnerAccess(() =>
+            renderOwnerRoute(routeName)
+        );
 
         return;
     }
 
     if (routeName === "login") {
+        selectedLoginRole = "owner";
         showLoginPage();
+        return;
+    }
+
+    if (routeName === "customer") {
+        selectedLoginRole = "customer";
+        showCustomerAuthPage();
         return;
     }
 
@@ -4508,6 +5586,15 @@ function renderRoute(routeName) {
         return;
     }
 
+    navigateTo("landing");
+}
+
+
+/*
+ * Halaman-halaman pemilik dipisah dari renderRoute() supaya bisa dirender
+ * setelah verifyOwnerAccess() selesai memeriksa sesi Supabase.
+ */
+function renderOwnerRoute(routeName) {
     if (routeName === "owner") {
         showOwnerDashboard();
         return;
@@ -4524,15 +5611,14 @@ function renderRoute(routeName) {
     }
 
     if (
-        ["finance", "profile"].includes(
-            routeName
-        )
+        routeName === "finance" ||
+        routeName === "profile"
     ) {
         showOwnerPlaceholder(routeName);
         return;
     }
 
-    navigateTo("landing");
+    showOwnerDashboard();
 }
 
 
@@ -4578,7 +5664,73 @@ async function initializeApp() {
      */
     updateDistances(mapCenter.latitude, mapCenter.longitude);
 
+    /*
+     * Tautan dari email Supabase (konfirmasi akun / atur ulang kata sandi)
+     * membawa parameternya sendiri di URL. Router di sini berbasis hash, jadi
+     * parameter itu tidak boleh diperlakukan sebagai nama halaman: tangani
+     * dulu, baru arahkan ke rute tujuan.
+     */
+    const adaHasilTautanEmail = Boolean(
+        INITIAL_AUTH_PARAMS.token ||
+            INITIAL_AUTH_PARAMS.error ||
+            INITIAL_AUTH_PARAMS.type
+    );
+
+    if (adaHasilTautanEmail) {
+        const tujuan = await finishAuthRedirect();
+
+        bersihkanParameterTautan(tujuan);
+        renderRoute(tujuan);
+
+        return;
+    }
+
+    /*
+     * Kalau sesi Supabase masih tersimpan (halaman dimuat ulang), peran
+     * dipulihkan dari sesi itu supaya pemilik tidak terlempar dari dashboard
+     * dan pelanggan tidak kehilangan statusnya.
+     */
+    await restoreRoleFromSession();
+
     renderRoute(initialRoute);
 }
+
+
+/*
+ * Mengganti URL yang membawa hasil tautan email dengan rute bersih, supaya
+ * tokennya tidak tertinggal di address bar maupun di riwayat peramban.
+ */
+function bersihkanParameterTautan(routeName) {
+    const urlBersih =
+        window.location.pathname + "#" + routeName;
+
+    window.history.replaceState(null, "", urlBersih);
+}
+
+/*
+ * Jaring pengaman: bila supabase-js melaporkan pemulihan kata sandi lewat
+ * event (bukan lewat URL yang ditangkap saat halaman dimuat), halaman kata
+ * sandi baru tetap dibuka.
+ */
+supabaseClient.auth.onAuthStateChange((event) => {
+    if (event !== "PASSWORD_RECOVERY") {
+        return;
+    }
+
+    selectedLoginRole = "customer";
+    customerAuthMode = "new-password";
+    customerAuthNoticeKind = "info";
+    customerAuthNotice =
+        "Masukkan kata sandi baru untuk akunmu, lalu masuk kembali.";
+
+    if (window.location.hash === "#customer") {
+        showCustomerAuthPage();
+
+        return;
+    }
+
+    window.location.hash = "customer";
+});
+
 
 initializeApp();
