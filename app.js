@@ -531,7 +531,7 @@ let markers = [];
 let radiusCircle = null;
 let userMarker = null;
 let selectedLaundryId = null;
-let selectedLoginRole = "customer";
+let selectedLoginRole = "owner";
 let orderCountdownInterval = null;
 
 
@@ -2384,13 +2384,7 @@ function showLandingPage() {
                         </button>
                     </div>
 
-                    <button
-                        type="button"
-                        class="landing-guest-button"
-                        onclick="loginAsGuest()"
-                    >
-                        Lanjutkan tanpa login
-                    </button>
+                    
                 </div>
             </section>
         </main>
@@ -2527,39 +2521,15 @@ function showLoginPage() {
 
             <section class="login-form-side">
                 <div class="login-form">
-                    <div class="login-role-tabs">
-                        <button
-                            type="button"
-                            class="login-role-button ${
-                                !isOwner ? "active" : ""
-                            }"
-                            onclick="selectLoginRole('customer')"
-                        >
-                            Pelanggan
-                        </button>
-
-                        <button
-                            type="button"
-                            class="login-role-button ${
-                                isOwner ? "active" : ""
-                            }"
-                            onclick="selectLoginRole('owner')"
-                        >
-                            Pemilik Laundry
-                        </button>
-                    </div>
-
-                    <span class="status-badge ${
-                        isOwner ? "unknown" : "open"
-                    }">
-                        ${
-                            isOwner
-                                ? "Portal pemilik laundry"
-                                : "Portal pelanggan"
-                        }
-                    </span>
-
-                    <h2>
+                    <section class="login-form-side">
+                        <div class="login-form">
+                            <h2>
+                                ${
+                                    isOwner
+                                        ? "Login Pemilik"
+                                        : "Login Pelanggan"
+                                }
+                            </h2>
                         ${
                             isOwner
                                 ? "Login Pemilik"
@@ -2637,24 +2607,6 @@ function showLoginPage() {
                             }
                         </button>
                     </form>
-
-                    ${
-                        !isOwner
-                            ? `
-                                <div class="login-divider">
-                                    <span>atau</span>
-                                </div>
-
-                                <button
-                                    type="button"
-                                    class="secondary-button guest-button"
-                                    onclick="loginAsGuest()"
-                                >
-                                    Lanjutkan sebagai tamu
-                                </button>
-                            `
-                            : ""
-                    }
                 </div>
             </section>
         </main>
