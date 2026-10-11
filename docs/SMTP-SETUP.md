@@ -38,6 +38,59 @@ Konsekuensi praktis: dua kali pengujian alur email dalam satu jam sudah menghabi
 kuota seluruh project. Karena itu pengujian manual berurutan (daftar → konfirmasi →
 atur ulang) pasti berhenti di langkah berikutnya.
 
+## Bolehkah memakai send.ownmap.id? Siapa yang memasang catatan DNS-nya?
+
+Secara teknis boleh, dan justru cara yang rapi: memakai **subdomain pengirim**
+(`send.ownmap.id`) tidak mengganggu surel manusia di `ownmap.id`, dan memisahkan
+reputasi pengiriman otomatis dari domain utama. Karena alamat websitenya sendiri
+memang di `ownmap.id/osig10`, pengirim dari subdomain itu terlihat konsisten
+dengan proyeknya.
+
+Keputusan pemakaian domain ada di tangan pemiliknya: **ownmap.id milik Pak
+Firman Hadi**. Jadi yang perlu dilakukan tim: minta persetujuan sekaligus
+bantuannya memasang catatan DNS, dengan daftar catatan yang siap tempel (ada di
+Langkah B di bawah).
+
+Catatan DNS hanya bisa ditambahkan lewat konsol DNS Hetzner (dns.hetzner.com)
+memakai akun pemilik zona. Nameserver `ownmap.id` ada di Hetzner
+(`hydrogen/oxygen.ns.hetzner.com`, `helium.ns.hetzner.de`) dan **tidak ada token
+API DNS Hetzner di server ini**, jadi pemasangannya memang harus dilakukan oleh
+pemilik domain — bukan sesuatu yang bisa dikerjakan otomatis dari server. Yang
+bisa dikerjakan dari sisi server: memeriksa setelah catatan dipasang, dengan
+`dig` langsung ke nameserver otoritatif (`dig @hydrogen.ns.hetzner.com …`),
+lalu menguji pengiriman SMTP-nya.
+
+### Kalau akses DNS belum tersedia: jalur sementara tanpa DNS
+
+Dua penyedia mengizinkan verifikasi **satu alamat pengirim** tanpa menyentuh DNS
+sama sekali:
+
+| Penyedia | Cara | Pengguna SMTP | Sandi SMTP |
+|---|---|---|---|
+| SendGrid | Single Sender Verification | `apikey` | API key |
+| Brevo | verifikasi sender (kode dikirim ke alamat itu) | alamat login Brevo | SMTP key |
+
+Konsekuensinya harus disadari: pengirimnya berupa alamat surel biasa (misalnya
+akun Gmail tim), tanpa SPF/DKIM domain sendiri, sehingga peluang masuk folder
+spam lebih besar dan tampilannya kurang profesional. Tetap jauh lebih baik
+daripada batas 2 email/jam, jadi layak dipakai sebagai jembatan sampai catatan
+DNS `send.ownmap.id` terpasang. Resend **tidak** cocok untuk jalur ini: tanpa
+domain terverifikasi ia hanya boleh mengirim ke alamat pemilik akunnya sendiri.
+
+### Pesan siap kirim ke pemilik domain
+
+> Mohon dibantu menambahkan tiga catatan DNS di zona `ownmap.id` (konsol DNS
+> Hetzner, dns.hetzner.com) untuk pengirim email aplikasi TemWash (OSIG 10):
+>
+> - `MX   send` → `feedback-smtp.<wilayah>.amazonses.com` prioritas 10
+> - `TXT  send` → `v=spf1 include:amazonses.com ~all`
+> - `TXT  resend._domainkey.send` → `p=MIGf…` (nilai panjang dari dashboard
+>   penyedia email)
+>
+> Nilai persisnya kami kirimkan begitu pendaftaran domain di penyedia selesai.
+> Setelah catatan terpasang, kami verifikasi sendiri dengan `dig` langsung ke
+> nameserver `hydrogen.ns.hetzner.com` dan melaporkan hasilnya.
+
 ## Yang perlu dipasang: SMTP penyedia
 
 Server ownmap.id **tidak bisa** mengirim email langsung ke internet (port 25
