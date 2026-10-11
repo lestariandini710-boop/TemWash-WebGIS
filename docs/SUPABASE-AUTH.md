@@ -43,10 +43,15 @@ dicek sekali di dashboard Supabase, dan cara mengujinya.
    ingin berbahasa Indonesia, sunting template "Confirm signup" dan
    "Reset password" — jangan ubah tautan `{{ .ConfirmationURL }}` di dalamnya.
 5. **Pengiriman email**: project masih memakai pengirim bawaan Supabase dengan
-   batas kirim rendah (beberapa email per jam). Untuk pemakaian nyata, sambungkan
-   SMTP sendiri (Resend, Brevo, SendGrid) di **Authentication → SMTP Settings**.
-   Kalau batasnya tercapai, aplikasi menampilkan pesan "Permintaan email terlalu
-   sering. Coba lagi beberapa menit kemudian."
+   batas kirim **2 email per jam untuk seluruh project** (semua endpoint yang
+   mengirim email berbagi kuota yang sama). Untuk pemakaian nyata, sambungkan
+   SMTP sendiri di **Authentication → Emails → SMTP Settings**, lalu naikkan
+   batasnya di **Authentication → Rate Limits**. Petunjuk lengkapnya ada di
+   `docs/SMTP-SETUP.md`.
+   Aplikasi sekarang membedakan dua jenis pembatasan itu: batas tingkat project
+   dijelaskan sebagai "Batas pengiriman email aplikasi sudah tercapai… 2 email
+   per jam untuk seluruh aplikasi", sedangkan batas per alamat menyebut angka
+   tunggu dari server ("…bisa dilakukan setelah N detik").
 6. **Authentication → Users**: hapus akun uji bila tidak diperlukan. Uji
    pendaftaran 11 Oktober 2026 membuat satu akun bernama
    `uji.temwash.<timestamp>@ownmap.id` (belum terkonfirmasi).
@@ -103,10 +108,12 @@ node verify_login.js         # form login pemilik & masuk ke dashboard
 node verify_customer_auth.js # alur pelanggan (lihat di bawah)
 ```
 
-`verify_customer_auth.js` memeriksa 25 hal: kartu pelanggan mengarah ke halaman
+`verify_customer_auth.js` memeriksa 33 hal: kartu pelanggan mengarah ke halaman
 masuk, tiga mode halaman, validasi klien (tidak memanggil server), permintaan
-tautan atur ulang, sandi salah, akun pemilik ditolak di pintu pelanggan, tamu
-bisa membuka peta, dashboard pemilik tidak bisa dibuka walau perannya dipalsukan,
-tautan email tidak dibaca sebagai nama halaman, dan token tidak tertinggal di
-address bar. Uji pendaftaran sungguhan (mengirim satu email) hanya jalan bila
-variabel `ALLOW_SIGNUP_TEST=1` di-set.
+tautan atur ulang, pemetaan pesan batas email (kuota project versus batas per
+alamat), sandi salah, akun pemilik ditolak di pintu pelanggan, tamu bisa membuka
+peta, dashboard pemilik tidak bisa dibuka walau perannya dipalsukan, tautan email
+tidak dibaca sebagai nama halaman, dan token tidak tertinggal di address bar. Uji
+pendaftaran sungguhan (mengirim satu email) hanya jalan bila variabel
+`ALLOW_SIGNUP_TEST=1` di-set. Permintaan tautan atur ulang pada uji ini memakai
+alamat yang tidak terdaftar, sehingga tidak memakai jatah email project.
