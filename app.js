@@ -2521,21 +2521,13 @@ function showLoginPage() {
 
             <section class="login-form-side">
                 <div class="login-form">
-                    <section class="login-form-side">
-                        <div class="login-form">
-                            <h2>
+                    <h2>
                                 ${
                                     isOwner
                                         ? "Login Pemilik"
                                         : "Login Pelanggan"
                                 }
                             </h2>
-                        ${
-                            isOwner
-                                ? "Login Pemilik"
-                                : "Login Pelanggan"
-                        }
-                    </h2>
 
                     <p>
                         ${
@@ -2564,11 +2556,8 @@ function showLoginPage() {
                             <input
                                 id="loginEmail"
                                 type="email"
-                                value="${
-                                    isOwner
-                                        ? "andi@temwash.id"
-                                        : "pelanggan@temwash.id"
-                                }"
+                                placeholder="nama@email.com"
+                                autocomplete="username"
                                 required
                             >
                         </div>
@@ -2579,11 +2568,8 @@ function showLoginPage() {
                             <input
                                 id="loginPassword"
                                 type="password"
-                                value="${
-                                    isOwner
-                                        ? "123456"
-                                        : "pelanggan123"
-                                }"
+                                placeholder="Kata sandi"
+                                autocomplete="current-password"
                                 required
                             >
                         </div>
@@ -4576,7 +4562,23 @@ const initialRoute =
 async function initializeApp() {
     await loadLaundryDataFromSupabase();
 
-    updateDistances(latitude, longitude);
+    /*
+     * Perbaikan commit 20242b4: renderRoute(initialRoute) terhapus dan diganti
+     * updateDistances(latitude, longitude). Kedua identifier `latitude` dan
+     * `longitude` TIDAK ada di scope global (hanya variabel lokal di fungsi
+     * lain), sehingga initializeApp() melempar ReferenceError dan tidak ada
+     * satu pun bagian halaman yang dirender (#app tetap kosong).
+     *
+     * Selain mengembalikan renderRoute(), jarak dihitung ulang di sini memakai
+     * mapCenter: updateDistances() di baris ~594 jalan SEBELUM
+     * loadLaundryDataFromSupabase() menggantikan laundryData, jadi setiap
+     * outlet dari Supabase tidak punya properti `distance` (undefined, bukan
+     * null) -> kartu "Self Laundry Terdekat" selalu menulis "Koordinat belum
+     * tersedia" dan urutannya acak.
+     */
+    updateDistances(mapCenter.latitude, mapCenter.longitude);
+
+    renderRoute(initialRoute);
 }
 
 initializeApp();
