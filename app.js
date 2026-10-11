@@ -2562,6 +2562,50 @@ function setButtonBusy(button, busy, busyText, idleText) {
 }
 
 /*
+ * Membedakan dua jenis pembatasan email yang dikirim Supabase Auth:
+ *
+ *  1. "email rate limit exceeded" → batas tingkat PROJECT. Pengirim bawaan
+ *     Supabase hanya mengizinkan 2 email per jam untuk SELURUH aplikasi, dipakai
+ *     bersama oleh konfirmasi pendaftaran, atur ulang kata sandi, dan tautan
+ *     ajaib. Ini bukan salah pengguna, dan menunggu beberapa menit tidak cukup
+ *     karena jendelanya berputar per jam.
+ *
+ *  2. "For security purposes, you can only request this after N seconds"
+ *     → batas kirim ulang per ALAMAT (bawaan 60 detik untuk akun yang sama).
+ *
+ * Keduanya memakai error_code yang sama (over_email_send_rate_limit), jadi yang
+ * membedakannya adalah pesan dari server.
+ */
+function terjemahkanBatasEmail(pesanServer) {
+    const pesan = (pesanServer || "").toLowerCase();
+
+    if (pesan.includes("email rate limit exceeded")) {
+        return "Batas pengiriman email aplikasi sudah tercapai. Pengirim email bawaan hanya memberi 2 email per jam untuk seluruh aplikasi, jadi ini bukan karena akun Anda. Coba lagi paling cepat satu jam, atau hubungi pengelola untuk memasang pengirim email sendiri.";
+    }
+
+    const detik = (pesanServer || "").match(
+        /after (\d+)\s*seconds?/i
+    );
+
+    if (detik) {
+        return (
+            "Untuk keamanan, permintaan baru untuk alamat ini bisa dilakukan setelah " +
+            detik[1] +
+            " detik. Coba lagi sebentar lagi."
+        );
+    }
+
+    if (
+        pesan.includes("for security purposes") ||
+        pesan.includes("only request this after")
+    ) {
+        return "Permintaan untuk alamat ini masih terlalu sering. Tunggu sekitar satu menit, lalu coba lagi.";
+    }
+
+    return "Permintaan email terlalu sering. Coba lagi beberapa menit kemudian.";
+}
+
+/*
  * Menerjemahkan galat Supabase Auth menjadi kalimat berbahasa Indonesia.
  */
 function customerAuthErrorMessage(error, fallback) {
@@ -2594,7 +2638,7 @@ function customerAuthErrorMessage(error, fallback) {
         code === "over_email_send_rate_limit" ||
         /rate limit/i.test(message)
     ) {
-        return "Permintaan email terlalu sering. Coba lagi beberapa menit kemudian.";
+        return terjemahkanBatasEmail(message);
     }
 
     if (/password should be at least/i.test(message)) {
