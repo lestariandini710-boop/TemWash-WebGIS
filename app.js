@@ -100,8 +100,8 @@ const promoData = [
         description: "Diskon untuk layanan laundry pilihan.",
         discountType: "percentage",
         discountValue: 20,
-        startDate: "2026-10-14",
-        endDate: "2026-10-31",
+        startDate: "2026-11-01",
+        endDate: "2026-12-31",
         terms: "Contoh promo untuk pengujian.",
         status: "active"
     },
@@ -112,8 +112,8 @@ const promoData = [
         description: "Potongan harga untuk pelanggan baru.",
         discountType: "nominal",
         discountValue: 5000,
-        startDate: "2026-10-14",
-        endDate: "2026-10-31",
+        startDate: "2026-11-01",
+        endDate: "2026-12-31",
         terms: "Contoh promo untuk pengujian.",
         status: "active"
     },
@@ -124,8 +124,8 @@ const promoData = [
         description: "Penawaran khusus layanan laundry.",
         discountType: "percentage",
         discountValue: 10,
-        startDate: "2026-10-14",
-        endDate: "2026-10-20",
+        startDate: "2026-11-01",
+        endDate: "2026-12-31",
         terms: "Contoh promo untuk pengujian.",
         status: "active"
     }
