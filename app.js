@@ -85,6 +85,231 @@ async function testSupabaseConnection() {
 testSupabaseConnection();
 
 /* =====================================================
+   DATA PROMO LAUNDRY
+
+   Masih data contoh di dalam kode. Nama field-nya sengaja dipertahankan
+   supaya kalau nanti dipindahkan ke Supabase, bagian yang memakainya
+   tidak perlu diubah.
+===================================================== */
+
+const promoData = [
+    {
+        id: "PROMO001",
+        laundryId: "L001",
+        title: "Promo Laundry Hemat",
+        description: "Diskon untuk layanan laundry pilihan.",
+        discountType: "percentage",
+        discountValue: 20,
+        startDate: "2026-10-14",
+        endDate: "2026-10-31",
+        terms: "Contoh promo untuk pengujian.",
+        status: "active"
+    },
+    {
+        id: "PROMO002",
+        laundryId: "L002",
+        title: "Promo Pelanggan Baru",
+        description: "Potongan harga untuk pelanggan baru.",
+        discountType: "nominal",
+        discountValue: 5000,
+        startDate: "2026-10-14",
+        endDate: "2026-10-31",
+        terms: "Contoh promo untuk pengujian.",
+        status: "active"
+    },
+    {
+        id: "PROMO003",
+        laundryId: "L003",
+        title: "Promo Cuci Hemat",
+        description: "Penawaran khusus layanan laundry.",
+        discountType: "percentage",
+        discountValue: 10,
+        startDate: "2026-10-14",
+        endDate: "2026-10-20",
+        terms: "Contoh promo untuk pengujian.",
+        status: "active"
+    }
+];
+
+/* =====================================================
+   VALIDASI DATA PROMO
+===================================================== */
+
+const POLA_TANGGAL_PROMO = /^\d{4}-\d{2}-\d{2}$/;
+
+/*
+ * Mengembalikan true hanya kalau nilainya benar-benar tanggal YYYY-MM-DD
+ * yang ada di kalender. Pemeriksaan pola saja tidak cukup: "2026-02-30"
+ * dan "2026-13-01" lolos pola tapi bukan tanggal nyata, jadi hasil
+ * penguraiannya dibandingkan balik dengan angka aslinya.
+ */
+function tanggalPromoValid(nilai) {
+    if (
+        typeof nilai !== "string" ||
+        !POLA_TANGGAL_PROMO.test(nilai)
+    ) {
+        return false;
+    }
+
+    const bagian = nilai.split("-").map(Number);
+
+    const tanggal = new Date(
+        Date.UTC(bagian[0], bagian[1] - 1, bagian[2])
+    );
+
+    return (
+        tanggal.getUTCFullYear() === bagian[0] &&
+        tanggal.getUTCMonth() === bagian[1] - 1 &&
+        tanggal.getUTCDate() === bagian[2]
+    );
+}
+
+/*
+ * Memeriksa satu promo dan mengembalikan daftar masalahnya.
+ * Daftar kosong berarti promo sah dan boleh ditampilkan.
+ */
+function periksaPromo(promo) {
+    const masalah = [];
+
+    if (!promo || typeof promo !== "object") {
+        return ["data promo bukan objek"];
+    }
+
+    if (!promo.id) {
+        masalah.push("id promo kosong");
+    }
+
+    if (!promo.laundryId) {
+        masalah.push("laundryId kosong");
+    }
+
+    if (!tanggalPromoValid(promo.startDate)) {
+        masalah.push(
+            `startDate bukan tanggal YYYY-MM-DD yang nyata: "${promo.startDate}"`
+        );
+    }
+
+    if (!tanggalPromoValid(promo.endDate)) {
+        masalah.push(
+            `endDate bukan tanggal YYYY-MM-DD yang nyata: "${promo.endDate}"`
+        );
+    }
+
+    if (
+        tanggalPromoValid(promo.startDate) &&
+        tanggalPromoValid(promo.endDate) &&
+        promo.startDate > promo.endDate
+    ) {
+        masalah.push(
+            "startDate lebih akhir daripada endDate"
+        );
+    }
+
+    const tipeDiskon = String(
+        promo.discountType || ""
+    ).toLowerCase();
+
+    const nilaiDiskon = Number(
+        promo.discountValue
+    );
+
+    if (
+        tipeDiskon !== "percentage" &&
+        tipeDiskon !== "nominal"
+    ) {
+        masalah.push(
+            `discountType harus "percentage" atau "nominal", bukan "${promo.discountType}"`
+        );
+    }
+
+    if (!Number.isFinite(nilaiDiskon)) {
+        masalah.push(
+            "discountValue bukan angka"
+        );
+    } else if (
+        tipeDiskon === "percentage" &&
+        (nilaiDiskon < 1 || nilaiDiskon > 100)
+    ) {
+        masalah.push(
+            `diskon persentase harus antara 1 dan 100, bukan ${nilaiDiskon}`
+        );
+    } else if (
+        tipeDiskon === "nominal" &&
+        nilaiDiskon < 0
+    ) {
+        masalah.push(
+            `diskon nominal tidak boleh negatif, bukan ${nilaiDiskon}`
+        );
+    }
+
+    return masalah;
+}
+
+/* =====================================================
+   FUNGSI FILTER PROMO AKTIF
+===================================================== */
+
+function getActivePromos() {
+    const now = new Date();
+
+    const today = [
+        now.getFullYear(),
+        String(now.getMonth() + 1).padStart(2, "0"),
+        String(now.getDate()).padStart(2, "0")
+    ].join("-");
+
+    return promoData.filter((promo) => {
+        const masalah = periksaPromo(promo);
+
+        if (masalah.length) {
+            /*
+             * Data promo yang cacat tidak dibuang diam-diam. Alasannya
+             * dicetak supaya sumbernya kelihatan, dan ini hanya berjalan
+             * saat halaman promo dibuka, bukan di setiap halaman.
+             */
+            console.warn(
+                `Promo ${
+                    promo && promo.id
+                        ? promo.id
+                        : "(tanpa id)"
+                } dilewati: ${masalah.join("; ")}`
+            );
+
+            return false;
+        }
+
+        return (
+            String(promo.status || "").toLowerCase() ===
+                "active" &&
+            promo.startDate <= today &&
+            promo.endDate >= today
+        );
+    });
+}
+
+function formatPromoDiscount(promo) {
+    const tipeDiskon = String(
+        promo.discountType || ""
+    ).toLowerCase();
+
+    const nilaiDiskon = Number(
+        promo.discountValue
+    );
+
+    if (tipeDiskon === "percentage") {
+        return `Diskon ${nilaiDiskon}%`;
+    }
+
+    if (tipeDiskon === "nominal") {
+        return `Potongan Rp${nilaiDiskon.toLocaleString(
+            "id-ID"
+        )}`;
+    }
+
+    return "Nilai promo belum tersedia";
+}
+
+/* =====================================================
    DATA LAUNDRY
 ===================================================== */
 
@@ -1101,6 +1326,13 @@ function createHeader(activePage) {
                 </button>
 
                 <button
+                    data-route="promos"
+                    class="${activePage === "promos" ? "active" : ""}"
+                >
+                    Promo Laundry
+                </button>
+
+                <button
                     data-route="about"
                     class="${activePage === "about" ? "active" : ""}"
                 >
@@ -1172,6 +1404,17 @@ function createSidebar(activePage) {
             >
                 <span>☷</span>
                 <span>Daftar</span>
+            </button>
+
+            <button
+                type="button"
+                class="left-navigation-button ${
+                    activePage === "promos" ? "active" : ""
+                }"
+                data-route="promos"
+            >
+                <span>％</span>
+                <span>Promo Laundry</span>
             </button>
 
             <button
@@ -2273,6 +2516,111 @@ function bindTableFilter() {
         "change",
         updateTable
     );
+}
+
+
+/* =====================================================
+   HALAMAN PROMO LAUNDRY
+===================================================== */
+
+function showPromoPage() {
+    const activePromos = getActivePromos();
+
+    const promoCards = activePromos.length
+        ? activePromos.map((promo) => {
+            const laundry = laundryData.find(
+                (item) => item.laundryId === promo.laundryId
+            );
+
+            if (!laundry) {
+                /*
+                 * Jangan menulis nama pengganti seolah datanya lengkap.
+                 * Promo dan kodenya disebut supaya ketahuan bahwa ada
+                 * baris promo yang menunjuk outlet tidak dikenal.
+                 */
+                console.warn(
+                    `Promo ${promo.id}: laundryId "${promo.laundryId}" tidak ada di data outlet (${laundryData.length} outlet termuat).`
+                );
+            }
+
+            const laundryName = laundry
+                ? laundry.name
+                : `Outlet belum terdaftar (kode: ${promo.laundryId})`;
+
+            return `
+                <article class="card promo-card">
+                    <div class="promo-card-top">
+                        <span class="promo-label">PROMO AKTIF</span>
+                        <span class="promo-discount">
+                            ${formatPromoDiscount(promo)}
+                        </span>
+                    </div>
+
+                    <h2>${promo.title || ""}</h2>
+
+                    <p>${promo.description || ""}</p>
+
+                    <div class="promo-outlet">
+                        <strong>Nama outlet</strong>
+                        <span>${laundryName}</span>
+                    </div>
+
+                    <div class="promo-period">
+                        <span>Periode promo</span>
+                        <strong>
+                            ${promo.startDate} s.d. ${promo.endDate}
+                        </strong>
+                    </div>
+
+                    <div class="promo-terms">
+                        <strong>Syarat dan ketentuan</strong>
+                        <p>${promo.terms || ""}</p>
+                    </div>
+
+                    <button
+                        type="button"
+                        class="primary-button"
+                        data-route="map"
+                    >
+                        Lihat di Peta
+                    </button>
+                </article>
+            `;
+        }).join("")
+        : `
+            <div class="card promo-empty">
+                <h2>Belum ada promo aktif</h2>
+                <p>
+                    Promo laundry yang tersedia akan muncul
+                    di halaman ini.
+                </p>
+            </div>
+        `;
+
+    const content = `
+        <section class="standard-page">
+            <div class="page-heading">
+                <div>
+                    <h1>Promo Laundry</h1>
+                    <p>
+                        Temukan penawaran menarik dari outlet
+                        laundry di Kecamatan Tembalang.
+                    </p>
+                </div>
+            </div>
+
+            <div class="promo-grid">
+                ${promoCards}
+            </div>
+        </section>
+    `;
+
+    app.innerHTML = createPublicLayout(
+        "promos",
+        content
+    );
+
+    bindGlobalSearch();
 }
 
 
@@ -5583,6 +5931,11 @@ function renderRoute(routeName) {
 
     if (routeName === "about") {
         showAboutPage();
+        return;
+    }
+
+    if (routeName === "promos") {
+        showPromoPage();
         return;
     }
 
