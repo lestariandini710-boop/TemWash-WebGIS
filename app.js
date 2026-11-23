@@ -6087,3 +6087,305 @@ supabaseClient.auth.onAuthStateChange((event) => {
 
 
 initializeApp();
+
+/* Tambahan menu Keuangan dan Profil Outlet.
+   Tempel di paling bawah app.js. */
+{
+    const renderMenuSebelumnya = renderOwnerRoute;
+
+    function tampilkanHalamanTambahan(menu, judul, isi) {
+        app.innerHTML = `
+            <div class="owner-layout">
+                ${createOwnerSidebar(menu)}
+                <section class="owner-content">
+                    ${createOwnerHeader(judul)}
+                    <main class="owner-main">${isi}</main>
+                </section>
+            </div>
+        `;
+    }
+
+    function tampilkanKeuangan() {
+        const pesanan = ownerOrders.filter(
+            order => order.status !== "Dibatalkan"
+        );
+        const total = daftar =>
+            daftar.reduce((jumlah, order) => jumlah + Number(order.total), 0);
+        const lunas = pesanan.filter(order => order.payment === "Lunas");
+        const belumLunas = pesanan.filter(order => order.payment !== "Lunas");
+
+        tampilkanHalamanTambahan("finance", "Keuangan", `
+            <section class="card owner-panel">
+                <h2>Ringkasan pembayaran</h2>
+                <p>Orange Laundry Premium · Data simulasi</p>
+                <div style="display:flex;flex-wrap:wrap;gap:24px">
+                    <div>Kas masuk<br><strong>${formatRupiah(total(lunas))}</strong></div>
+                    <div>Belum lunas<br><strong>${formatRupiah(total(belumLunas))}</strong></div>
+                    <div>Pesanan tercatat<br><strong>${pesanan.length}</strong></div>
+                </div>
+            </section>
+        `);
+    }
+
+    function tampilkanProfilOutlet() {
+        tampilkanHalamanTambahan("profile", "Profil Outlet", `
+            <section class="card owner-panel">
+                <h2>Orange Laundry Premium</h2>
+                <p>Jl. Banjarsari Raya, Tembalang</p>
+                <a href="https://www.google.com/maps/search/?api=1&amp;query=Orange+Laundry+Premium+Jl.+Banjarsari+Raya+Tembalang"
+                   target="_blank" rel="noopener">Cari alamat di Google Maps ↗</a>
+            </section>
+        `);
+    }
+
+    renderOwnerRoute = function (menu) {
+        if (menu === "finance") return tampilkanKeuangan();
+        if (menu === "profile") return tampilkanProfilOutlet();
+        return renderMenuSebelumnya(menu);
+    };
+}
+
+/* Tambahan Dashboard, Pesanan, dan Mesin & Peralatan */
+{
+    const dashboardLama = showOwnerDashboard;
+    const pesananLama = showOrdersPage;
+    const mesinLama = showMachinesPage;
+    let waktuMulai;
+    let intervalTimer;
+
+    const style = document.createElement("style");
+    style.textContent = `
+        .tw-timer-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 145px), 1fr));
+            gap: 10px;
+        }
+        .tw-timer-card {
+            background: #f6fbfa;
+            border: 1px solid #d7e9e8;
+            border-radius: 12px;
+            padding: 12px;
+            text-align: center;
+        }
+        .tw-timer-heading {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .tw-timer-customer {
+            background: #e0f1ef;
+            color: #145557;
+            border-radius: 12px;
+            padding: 3px 8px;
+            font-size: .78rem;
+        }
+        .tw-timer-ring {
+            display: grid;
+            place-items: center;
+            width: 90px;
+            aspect-ratio: 1;
+            margin: 12px auto 6px;
+            border-radius: 50%;
+            background: conic-gradient(#07989c var(--sisa, 100%), #d7e9e8 0);
+        }
+        .tw-timer-ring span {
+            display: grid;
+            place-items: center;
+            width: 80%;
+            height: 80%;
+            border-radius: 50%;
+            background: white;
+            font-size: 1.2rem;
+            font-weight: 800;
+            font-variant-numeric: tabular-nums;
+        }
+        .order-stat-grid, .machine-stat-grid, .machine-card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+            gap: 14px;
+            margin: 16px 0;
+        }
+        .order-stat-grid .owner-summary-card,
+        .machine-stat-grid .owner-summary-card {
+            display: grid;
+            gap: 6px;
+            padding: 16px;
+            border-left: 4px solid #098f94;
+        }
+        .order-stat-grid strong, .machine-stat-grid strong { font-size: 1.6rem; }
+        .order-toolbar, .machine-filter-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+            padding: 14px;
+        }
+        .order-toolbar input, .order-toolbar select, .machine-filter-toolbar select {
+            max-width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #a8bcbe;
+            border-radius: 8px;
+            background: white;
+            color: inherit;
+            font: inherit;
+        }
+        .order-toolbar input { flex: 1 1 230px; }
+        #ownerOrderTable td:first-child { white-space: nowrap; }
+        #ownerOrderTable .table-secondary-text { display: block; }
+        #ownerOrderTable tr:hover { background: #eef8f7; }
+        .machine-status-card { padding: 16px; }
+        .machine-card-heading {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .machine-information p {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            margin: 8px 0;
+        }
+        .active-machine-information {
+            background: #edf8f6;
+            border-radius: 8px;
+            padding: 8px;
+        }
+        .machine-progress {
+            height: 6px;
+            border-radius: 8px;
+            background: #cce6e3;
+            overflow: hidden;
+        }
+        .machine-progress > div { height: 100%; background: #098f94; }
+    `;
+    document.head.append(style);
+
+    showOwnerDashboard = function () {
+        dashboardLama();
+
+        const panel = app.querySelector(".machine-grid");
+        if (!panel) return;
+
+        const kelompok = [
+            ["Mesin Cuci", 41, ["Budi", "Siti", "Raka", "Nabila", "Dina", "Arif"]],
+            ["Pengering", 45, ["Alya", "Fajar", "Intan", "Dimas", "Rani", "Bayu"]]
+        ];
+
+        const timerPanel = document.createElement("div");
+        timerPanel.innerHTML = `
+            <small>Timer simulasi</small>
+            ${kelompok.map(([jenis, menit, pelanggan]) => `
+                <section>
+                    <h3>${jenis}</h3>
+                    <div class="tw-timer-grid">
+                        ${pelanggan.map((nama, indeks) => `
+                            <article class="tw-timer-card">
+                                <div class="tw-timer-heading">
+                                    <strong>${jenis} ${indeks + 1}</strong>
+                                    <span class="tw-timer-customer">${nama}</span>
+                                </div>
+                                <div class="tw-timer-ring" data-menit="${menit}">
+                                    <span>${menit}:00</span>
+                                </div>
+                                <small>Sisa waktu</small>
+                            </article>
+                        `).join("")}
+                    </div>
+                </section>
+            `).join("")}
+        `;
+        panel.replaceWith(timerPanel);
+
+        waktuMulai ??= Date.now();
+        clearInterval(intervalTimer);
+
+        function perbaruiTimer() {
+            if (!timerPanel.isConnected) {
+                clearInterval(intervalTimer);
+                return;
+            }
+
+            const berlalu = Math.floor((Date.now() - waktuMulai) / 1000);
+
+            for (const ring of timerPanel.querySelectorAll("[data-menit]")) {
+                const durasi = Number(ring.dataset.menit) * 60;
+                const sisa = Math.max(0, durasi - berlalu);
+                const menit = String(Math.floor(sisa / 60)).padStart(2, "0");
+                const detik = String(sisa % 60).padStart(2, "0");
+                ring.firstElementChild.textContent = menit + ":" + detik;
+                ring.style.setProperty("--sisa", (sisa / durasi * 100) + "%");
+                if (sisa === 0) ring.nextElementSibling.textContent = "Siklus selesai";
+            }
+        }
+
+        intervalTimer = setInterval(perbaruiTimer, 1000);
+        perbaruiTimer();
+    };
+
+    showOrdersPage = function () {
+        pesananLama();
+
+        const toolbar = app.querySelector(".order-toolbar");
+        const tabel = app.querySelector("#ownerOrderTable");
+        const pencarianLama = app.querySelector("#ownerOrderSearch");
+        const statusLama = app.querySelector("#ownerOrderStatus");
+        if (!toolbar || !tabel || !pencarianLama || !statusLama) return;
+
+        // Pasang ulang kontrol agar satu fungsi menangani semua filter.
+        const pencarian = pencarianLama.cloneNode(true);
+        const status = statusLama.cloneNode(true);
+        pencarianLama.replaceWith(pencarian);
+        statusLama.replaceWith(status);
+        pencarian.placeholder = "Cari kode, nama, nomor HP, atau layanan";
+        pencarian.setAttribute("aria-label", "Cari pesanan");
+        status.setAttribute("aria-label", "Status pesanan");
+
+        const pembayaran = document.createElement("select");
+        pembayaran.setAttribute("aria-label", "Status pembayaran");
+        pembayaran.add(new Option("Semua pembayaran", ""));
+        for (const nilai of new Set(ownerOrders.map(order => order.payment))) {
+            pembayaran.add(new Option(nilai, nilai));
+        }
+
+        const jumlah = document.createElement("span");
+        jumlah.setAttribute("aria-live", "polite");
+        toolbar.append(pembayaran, jumlah);
+
+        function perbaruiPesanan() {
+            const kata = pencarian.value.trim().toLowerCase();
+            const digit = /^[+0-9 ().-]+$/.test(kata)
+                ? kata.replace(/\D/g, "")
+                : "";
+
+            const hasil = ownerOrders.filter(order => {
+                const teks = [order.id, order.customer, order.phone, order.service]
+                    .join(" ").toLowerCase();
+                const cocokTelepon = digit &&
+                    String(order.phone ?? "").replace(/\D/g, "").includes(digit);
+
+                return (teks.includes(kata) || cocokTelepon) &&
+                    (status.value === "Semua" || order.status === status.value) &&
+                    (!pembayaran.value || order.payment === pembayaran.value);
+            });
+
+            tabel.innerHTML = createOwnerOrderRows(hasil);
+            jumlah.textContent = hasil.length + " dari " + ownerOrders.length + " pesanan";
+        }
+
+        pencarian.addEventListener("input", perbaruiPesanan);
+        status.addEventListener("change", perbaruiPesanan);
+        pembayaran.addEventListener("change", perbaruiPesanan);
+        perbaruiPesanan();
+    };
+
+    showMachinesPage = function () {
+        mesinLama();
+        app.querySelector("#machineTypeFilter")
+            ?.setAttribute("aria-label", "Jenis mesin");
+        app.querySelector("#machineStatusFilter")
+            ?.setAttribute("aria-label", "Status mesin");
+    };
+}
